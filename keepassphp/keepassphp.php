@@ -1,11 +1,39 @@
 <?php
 
+/*
+ * LICENSE: Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ * @package    KeePassPHP
+ * @author     Louis Traynard <louis.traynard@m4x.org>
+ * @copyright  Louis Traynard
+ * @license    http://www.opensource.org/licenses/mit-license.html  MIT License
+ * @link       https://github.com/shkdee/KeePassPHP
+ */
+
 /**
  * Main class of the KeePassPHP application.
- * Calls all the other classes, loads database,
- * and exploits results.
+ * Calls all the other classes, loads and adds databases, check and exploit
+ * results. Every creation of a database by the "client" application (e.g which
+ * is charge of printing the results in a web page) should be done through that
+ * class, as well as most of static calls.
  * 
- * @author Louis
+ * @author Louis Traynard
  */
 
 require_once "util/binary.php";
@@ -91,8 +119,8 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 * Stops the KeePassPHP application, and prints the
-	 * given message $msg if the debug mode is on.
+	 * Tells the display that PHP will be killed, gives it the debug message
+	 * $msg if the debug mode is one, and commits suicide.
 	 * @param string $msg
 	 */
 	public static function raiseError($msg)
@@ -103,7 +131,7 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 * Prints the given string $msg if the debug mode is on.
+	 * Sends the given debug string $msg to the display, if the debug mode is on
 	 * @param string $msg
 	 */
 	public static function printDebug($msg)
@@ -113,8 +141,8 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 * If the debug mode is on, prints the given string $msg, then
-	 * the given binary string $bin as an hex string.
+	 * If the debug mode is on, sends the given debug string $msg, then the
+	 * given binary string $bin as an hex string.
 	 * @param string $msg
 	 * @param string $bin
 	 */
@@ -126,8 +154,8 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 * If the debug mode is on, prints the given string $msg, then
-	 * the given array $array with print_r.
+	 * If the debug mode is on, sends the given debug string $msg, then the
+	 * given array $array with print_r.
 	 * @param string $msg
 	 * @param array $array
 	 */
@@ -143,10 +171,17 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 *
-	 * @param type $dbkey
-	 * @param type $pwd
-	 * @param type $usePwdInCK
+	 * Tries to get the KeePass database corresponding the the ID $dbid, and to
+	 * the passwords $pwd and $passwords. $pwd is the password needed to decrypt
+	 * the KeePassPHP's internal database, which contains the name of the
+	 * KeePass database, and the possible key files ; if $userPwdInCK, $pwd will
+	 * also be used as the first password of the Master Key, otherwise, only
+	 * passwords of $passwords will be used.
+	 * Returns the database in case of success, null otherwise (the ID may be
+	 * wrong, the password(s) may be wrond, etc.)
+	 * @param string $dbid
+	 * @param string $pwd
+	 * @param boolean $usePwdInCK
 	 * @param array $passwords
 	 * @return null|Database
 	 */
@@ -211,14 +246,18 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 *
-	 * @param type $dbid
-	 * @param type $pwd
-	 * @param type $hashname
+	 * Adds the database whose hash key is $hashname to KeePassPHP, with $dbid
+	 * as ID, $pwd oas password for the KeePassPHP's internal database, $keys
+	 * as a description of the master key, $entries as the array of entries
+	 * to keep in the internal database, and $writeable being true if sensitive
+	 * that array of entries can be written on the disk, and false otherwise.
+	 * @param string $dbid
+	 * @param string $pwd
+	 * @param string $hashname
 	 * @param array $keys
-	 * @param type $entries
-	 * @param type $writeable
-	 * @return type
+	 * @param array $entries
+	 * @param boolean $writeable
+	 * @return null|string
 	 */
 	public static function add($dbid, $pwd, $hashname, array $keys,
 			$entries, $writeable)

@@ -1,7 +1,10 @@
 <?php
 
 /**
- * Description of database
+ * An abstract class in charge of managing a KeePass database: loading it,
+ * and extracting entries, icons and passwords from it, with an unified way
+ * (because several sources could exist : keepass 1.x file, keepass 2.x file,
+ * file not stored locally, etc.).
  *
  * @author Louis
  */
