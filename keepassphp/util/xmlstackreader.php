@@ -105,7 +105,7 @@ class XMLStackReader
         }
         do
         {
-            if(!$this->r->read())
+            if(!@$this->r->read())
                 return false;
         }
         while($this->r->nodeType == XMLReader::END_ELEMENT

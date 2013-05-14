@@ -228,14 +228,14 @@ class KdbxImporter extends Database
 			$xml->close();
 			return false;
 		}
-		
+
 		$expectedParentsMeta = array(self::XML_FILEROOT, self::XML_META);
 		if(!$xml->readUntilParentsBe($expectedParentsMeta))
 		{
 			$xml->close();
 			return false;
 		}
-		
+
 		$isHeaderChecked = false;
 		$d = $xml->r->depth;
 		while($xml->isInSubtree($d))
@@ -267,8 +267,7 @@ class KdbxImporter extends Database
 			KeePassPHP::printDebug("Did not found HeaderHash text node...");
 
 		$this->rawEntries = array();
-		$expectedParents = array(self::XML_FILEROOT, self::XML_ROOT,
-			self::XML_GROUP, self::XML_GROUP, self::XML_ENTRY);
+		$expectedParents = array(self::XML_GROUP, self::XML_ENTRY);
 		while($xml->readUntilParentsBe($expectedParents))
 		{
 			$entry = array();

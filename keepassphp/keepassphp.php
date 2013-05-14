@@ -26,7 +26,7 @@
  * @link       https://github.com/shkdee/KeePassPHP
  */
 
-/**
+/*
  * here we include everything, we could use an autoload in the future but
  * the fact is that from the moment we want to decrypt a KeePass database,
  * we do need almost everything, so there is not much difference. The important
@@ -69,9 +69,9 @@ abstract class KeePassPHP
 	static public $errordump;
 	static public $isError;
 	static public $iconmanager;
+	static public $debug;
 	
 	static private $started = false;
-	static private $debug;
 
 	static private $dbmanager;
 	static private $kdbxmanager;
