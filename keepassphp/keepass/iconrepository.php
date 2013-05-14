@@ -51,7 +51,7 @@ class IconRepository
 	public function __construct($canBeWritten = true)
 	{
 		if(!self::$initialized)
-			KeePassPHP::raiseError("Icon Repository non initialiazed");
+			KeePassPHP::raiseError("Icon Repository not initialiazed.");
 		$this->writeable = $canBeWritten;
 	}
 

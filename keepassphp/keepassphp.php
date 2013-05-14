@@ -61,7 +61,8 @@ abstract class KeePassPHP
 	static private $dbmanager;
 	static private $kdbxmanager;
 	static private $keymanager;
-	static private $display;
+	static private $debug;
+	static private $errorhandler;
 	
 	const DEBUG = false;
 	const DEFAULT_HASH = "sha256";
@@ -94,15 +95,18 @@ abstract class KeePassPHP
 
 	/**
 	 * Starts the KeePassPHP application.
-	 * @return void
+	 * @param iErrorHandler $handler A handler to deal with and print errors.
+	 * @return null
 	 */
-	public static function init(Display $display)
+	public static function init(iErrorHandler $handler)
 	{
 		if(self::$started)
 			return null;       
 		
-		self::$display = $display;
+		self::$errorhandler = $handler;
+		self::$debug = "";
 		HashHouse::setDefault(self::DEFAULT_HASH);
+
 		IconRepository::Init(self::DIR_KEEPASSPHP . self::DIR_DATA .
 			self::DIR_ICONS, self::PREFIX_ICON);
 		self::$dbmanager = new FileManager(self::DIR_KEEPASSPHP .
@@ -119,45 +123,48 @@ abstract class KeePassPHP
 	}
 
 	/**
-	 * Tells the display that PHP will be killed, gives it the debug message
-	 * $msg if the debug mode is one, and commits suicide.
+	 * Tells the error handler to handle the error raised. Using KeePassPHP after
+	 * this method is called will result in undefined behavior (but most probably
+	 * new errors). The client application should consider that KeePassPHP can
+	 * not be used anymore after such an error.
 	 * @param string $msg
 	 */
 	public static function raiseError($msg)
 	{
-		self::$display->raiseError(self::DEBUG ? $msg :
-			"An unexpected error occured.");
-		die();
+		self::$errorhandler->handleError("An unexpected error occured. " .
+			self::DEBUG ? "Here is the debug trace :\n" . $msg . "\n" . self::$debug :
+			"That's all we know.");
+		//die();
 	}
 
 	/**
-	 * Sends the given debug string $msg to the display, if the debug mode is on
-	 * @param string $msg
+	 * Adds the given string to the debug data if debug mode is on.
+	 * @param string $msg The string to add to the debug data.
 	 */
 	public static function printDebug($msg)
 	{
 		if(self::DEBUG)
-			self::$display->addDebug($msg);
+			self::$debug .= self::makePrintable($msg) . "\n";
 	}
 
 	/**
-	 * If the debug mode is on, sends the given debug string $msg, then the
-	 * given binary string $bin as an hex string.
-	 * @param string $msg
-	 * @param string $bin
+	 * Adds the given debug string $msg, then the given binary string $bin as an
+	 * hex string, to the debug data if debug mode is on.
+	 * @param string $msg The 'normal' string to add to the debug data.
+	 * @param string $bin The binary string to print in hexa.
 	 */
 	public static function printDebugHexa($msg, $bin)
 	{
 		if(self::DEBUG)
-			self::$display->addDebug($msg . " : " .
-				Binary::fromString($bin)->asHexString());
+			self::$debug .= self::makePrintable($msg . " : " .
+				Binary::fromString($bin)->asHexString()) . "\n";
 	}
 
 	/**
-	 * If the debug mode is on, sends the given debug string $msg, then the
-	 * given array $array with print_r.
-	 * @param string $msg
-	 * @param array $array
+	 * Adds the given debug string $msg, then the given array $array (with
+	 * print_r), to the debug data if debug mode is on.
+	 * @param string $msg The string to add to the debug data.
+	 * @param array $array The array to add to the debug data.
 	 */
 	public static function printDebugArray($msg, $array)
 	{
@@ -165,9 +172,23 @@ abstract class KeePassPHP
 		{
 			ob_start();
 			print_r($array);
-			self::$display->addDebug($msg . " :: " . ob_get_contents());
+			self::$debug .= self::makePrintable($msg . " :: " .
+					ob_get_contents()) . "\n";
 			ob_end_clean();
 		}
+	}
+
+	/**
+	 * Returns the string in a html-printable format : encoded in UTF8, and with
+	 * some special chars rightly encoded. Every piece of data printed in a web
+	 * page and coming from KeePassPHP (either a password, an username, or a
+	 * debug stuff, *anything*) should be 'protected' by this method.
+	 * @param string $s The string to make html-printable.
+	 * @return string A sanitized string.
+	 */
+	public static function makePrintable($s)
+	{
+		return htmlspecialchars(utf8_encode($s), ENT_QUOTES, 'UTF-8');
 	}
 
 	/**
@@ -188,7 +209,10 @@ abstract class KeePassPHP
 	public static function get($dbid, $pwd, $usePwdInCK, array $passwords)
 	{
 		if(!self::$started)
+		{
 			self::raiseError("KeepassPHP is not started !");
+			return null;
+		}
 
 		$bindb = self::$dbmanager->getContentFromKey($dbid);
 		if($bindb == null)
@@ -277,7 +301,11 @@ abstract class KeePassPHP
 		$cipher->load();
 		$iv = $cipher->getIV();
 		if(strlen($iv) != self::IV_SIZE)
+		{
 			self::raiseError("Unexpected size of IV : " . strlen($iv));
+			$cipher->unload();
+			return null;
+		}
 		$bindb = $iv . $cipher->encrypt($plaindb);
 		$cipher->unload();
 
@@ -287,11 +315,21 @@ abstract class KeePassPHP
 
 	public static function exists($dbid)
 	{
+		if(!self::$started)
+		{
+			self::raiseError("KeepassPHP is not started !");
+			return false;
+		}
 		return self::$dbmanager->existsKey($dbid);
 	}
 
 	public static function checkPassword($dbid, $pwd)
 	{
+		if(!self::$started)
+		{
+			self::raiseError("KeepassPHP is not started !");
+			return false;
+		}
 		$bindb = self::$dbmanager->getContentFromKey($dbid);
 		$result = self::decryptUnserialize($bindb, $pwd);
 		return $result !== false;
@@ -323,6 +361,12 @@ abstract class KeePassPHP
 
 	public static function tryAddUploadedKdbx($dbid, $pwd, $kdbxfile, $keys)
 	{
+		if(!self::$started)
+		{
+			self::raiseError("KeepassPHP is not started !");
+			return false;
+		}
+
 		$nkeys = array();
 		foreach($keys as $k)
 		{
@@ -332,15 +376,24 @@ abstract class KeePassPHP
 			{
 				$h = KeePassPHP::addKeyFile($k[1]);
 				if($h == null)
-					self::raiseError("File upload failed unexpectedly.");
+				{
+					self::raiseError("Key file upload failed.");
+					return false;
+				}
 				$nkeys[] = array(KeePassPHP::KEY_FILE, $h);
 			}
 		}
 		$hashname = KeePassPHP::addKdbxFile($kdbxfile);
 		if($hashname == null)
-			self::raiseError("File upload failed unexpectedly.");
+		{
+			self::raiseError("Database file upload failed.");
+			return false;
+		}
 		if(KeePassPHP::add($dbid, $pwd, $hashname, $nkeys, array(), true) == null)
-			self::raiseError("Database write failed unexpectedly.");
+		{
+			self::raiseError("The database file could not be written.");
+			return false;
+		}
 		return true;
 	}
 
