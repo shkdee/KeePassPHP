@@ -74,14 +74,14 @@ class KdbxImporter extends Database
 		
 		if(!is_file($this->file) || !is_readable($this->file))
 		{
-			KeePassPHP::printDebug("Impossible to read " . $this->file);
+			KeePassPHP::raiseError("Impossible to read " . $this->file);
 			return false;
 		}
 
 		KeePassPHP::printDebug("Attempting to load database from ".$this->file);
 		if(!$this->tryParse(RessourceReader::openFile($this->file)))
 		{
-			KeePassPHP::printDebug("  ... attempt failed !");
+			KeePassPHP::raiseError("  ... attempt failed !");
 			return false;
 		}
 		KeePassPHP::printDebug("  ... attempt succeeded !");

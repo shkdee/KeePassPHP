@@ -34,6 +34,9 @@
  * sure we will try to add or get a database file.
  */
 
+/*
+ * Not directly KeePass-related stuff (helpers, tools, etc)
+ */
 require_once "util/binary.php";
 require_once "util/cipher.php";
 require_once "util/filemanager.php";
@@ -45,13 +48,14 @@ require_once "util/salsa20cipher.php";
 require_once "util/uploadmanager.php";
 require_once "util/xmlstackreader.php";
 
+/*
+ * KeePass-related stuff
+ */
 require_once "keepass/iconrepository.php";
 require_once "keepass/database.php";
 require_once "keepass/header.php";
 require_once "keepass/key.php";
 require_once "keepass/kdbximporter.php";
-
-require_once "ierrorhandler.php";
 
 /**
  * Main class of the KeePassPHP application.
@@ -59,19 +63,20 @@ require_once "ierrorhandler.php";
  * interaction with KeePassPHP by a client application should be done through
  * this class, and through the objets yielded by this class (mainly Database
  * objects).
- * 
  */
 abstract class KeePassPHP
 {
+	static public $errordump;
+	static public $isError;
+	
 	static private $started = false;
+	static private $debug;
+
 	static private $iconmanager;
 	static private $dbmanager;
 	static private $kdbxmanager;
 	static private $keymanager;
-	static private $debug;
-	static private $errorhandler;
 	
-	const DEBUG = false;
 	const DEFAULT_HASH = "sha256";
 	
 	const EXT_KPHPDB = "kphpdb";
@@ -102,20 +107,25 @@ abstract class KeePassPHP
 
 	/**
 	 * Starts the KeePassPHP application. Must be called before any other method
-	 * of KeePassPHP. The iErrorHandler $handler is in charge of dealing with
-	 * possible errors that may occur when uploading or decrypting files, as
-	 * KeePassPHP does not know what the client application wants to do with
-	 * them (print them, discard them, commit suicide...).
+	 * of KeePassPHP. If $debug is true, debug and error data will be added in
+	 * the static variable KeePassPHP::$errordump ; if $debug is false,
+	 * KeePass::$errordump will be non empty only if an error occurs.
+	 * Regardless of the value of $debug, the property KeePassPHP::$isError is
+	 * set to true if an error occurs. This way, a client application can check
+	 * if KeePassPHP detected an error, and retrieve some information from
+	 * KeePassPHP::$errordump (this information will probably not be useful
+	 * if $debug is false, though).
 	 * 
-	 * @param iErrorHandler $handler A handler to deal with KeePassPHP errors.
+	 * @param boolean $debug True to enable debug mode, false otherwise.
 	 */
-	public static function init(iErrorHandler $handler)
+	public static function init($debug = false)
 	{
 		if(self::$started)
-			return;       
+			return;
 		
-		self::$errorhandler = $handler;
-		self::$debug = "";
+		self::$isError = false;
+		self::$debug = $debug;
+		self::$errordump = "";
 
 		HashHouse::setDefault(self::DEFAULT_HASH);
 		self::$iconmanager = new IconManager(self::DIR_KEEPASSPHP .
@@ -128,7 +138,6 @@ abstract class KeePassPHP
 		self::$keymanager = new UploadManager(self::DIR_KEEPASSPHP .
 			self::DIR_DATA.self::DIR_SECURE.self::DIR_KEY, self::PREFEXT_KEY);
 
-
 		self::$started = true;
 		self::printDebug("KeePassPHP application started !");
 	}
@@ -138,17 +147,15 @@ abstract class KeePassPHP
 	 ****************************/
 
 	/**
-	 * Tells the error handler to handle the error raised. Using KeePassPHP after
-	 * this method is called will result in undefined behavior (but most probably
-	 * new errors). The client application should consider that KeePassPHP can
-	 * not be used anymore after such an error.
-	 * @param string $msg
+	 * Sets self::$isError to true, and adds the given error message $msg to
+	 * the error dump if debug mode is enabled.
+	 * @param string $msg The error message.
 	 */
 	public static function raiseError($msg)
 	{
-		self::$errorhandler->handleError("An unexpected error occured. " .
-			self::DEBUG ? "Here is the debug trace :\n" . $msg . "\n" . self::$debug :
-			"That's all we know.");
+		self::$isError = true;
+		self::$errordump .= "An unexpected error occured" . (self::$debug ?
+			": " . self::makePrintable($msg) : ". That's all we know.") . "\n";
 		//die();
 	}
 
@@ -158,8 +165,8 @@ abstract class KeePassPHP
 	 */
 	public static function printDebug($msg)
 	{
-		if(self::DEBUG)
-			self::$debug .= self::makePrintable($msg) . "\n";
+		if(self::$debug)
+			self::$errordump .= self::makePrintable($msg) . "\n";
 	}
 
 	/**
@@ -170,8 +177,8 @@ abstract class KeePassPHP
 	 */
 	public static function printDebugHexa($msg, $bin)
 	{
-		if(self::DEBUG)
-			self::$debug .= self::makePrintable($msg . " : " .
+		if(self::$debug)
+			self::$errordump .= self::makePrintable($msg . " :: " .
 				Binary::fromString($bin)->asHexString()) . "\n";
 	}
 
@@ -183,11 +190,11 @@ abstract class KeePassPHP
 	 */
 	public static function printDebugArray($msg, $array)
 	{
-		if(self::DEBUG)
+		if(self::$debug)
 		{
 			ob_start();
 			print_r($array);
-			self::$debug .= self::makePrintable($msg . " :: " .
+			self::$errordump .= self::makePrintable($msg . " :: " .
 					ob_get_contents()) . "\n";
 			ob_end_clean();
 		}
@@ -235,25 +242,25 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::printDebug("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started !");
 			return null;
 		}
 
 		$bindb = self::$dbmanager->getContentFromKey($dbid);
 		if($bindb == null)
 		{
-			self::printDebug("Database not found or void (ID=".$dbid.")");
+			self::raiseError("Database not found or void (ID=".$dbid.")");
 			return null;
 		}
 		$db = self::decryptUnserialize($bindb, $internalpwd);
 		if($db == false || !is_array($db) || count($db) < self::IDX_COUNT)
 		{
-			self::printDebug("Bad format, or wrong password (ID=".$dbid.")");
+			self::raiseError("Bad format, or wrong password (ID=".$dbid.")");
 			return null;
 		}
 		if($db[self::IDX_DBTYPE] != self::DBTYPE_KDBX)
 		{
-			self::printDebug("Types other than kbdx not yet supprted (ID=".$dbid.")");
+			self::raiseError("Types other than kbdx not yet supprted (ID=".$dbid.")");
 			return null;
 		}
 
@@ -267,7 +274,7 @@ abstract class KeePassPHP
 					$ckey->addKey(new KeyFromPassword(utf8_encode($keypwd)));
 				else
 				{
-					self::printDebug("Having more than one textual password" .
+					self::raiseError("Having more than one textual password" .
 						" is not yet possible (ID=".$dbid.")");
 					return null;
 				}
@@ -278,7 +285,7 @@ abstract class KeePassPHP
 				$filekey = new KeyFromFile(self::$keymanager->getFile($rk[1]));
 				if(!$filekey->isParsed)
 				{
-					self::printDebug("Key file parsing failure (ID=".$dbid.")");
+					self::raiseError("Key file parsing failure (ID=".$dbid.")");
 					return null;
 				}
 				$ckey->addKey($filekey);
@@ -331,7 +338,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::printDebug("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started !");
 			return false;
 		}
 
@@ -360,7 +367,7 @@ abstract class KeePassPHP
 		if(KeePassPHP::addInternal($dbid, $internalpwd, $hashname, $nkeys,
 				array(), true) == null)
 		{
-			self::raiseError("The database file could not be written.");
+			self::raiseError("Internal database write failed.");
 			return false;
 		}
 		return true;
@@ -377,7 +384,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::printDebug("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started !");
 			return false;
 		}
 		return self::$dbmanager->existsKey($dbid);
@@ -398,7 +405,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::printDebug("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started !");
 			return false;
 		}
 		$bindb = self::$dbmanager->getContentFromKey($dbid);
@@ -429,7 +436,7 @@ abstract class KeePassPHP
 				$filekey = new KeyFromFile($k[1]);
 				if(!$filekey->isParsed)
 				{
-					self::printDebug("Key file parsing failure in checkKeys");
+					self::raiseError("Key file parsing failure in checkKeys");
 					return false;
 				}
 				$ckey->addKey($filekey);

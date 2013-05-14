@@ -289,7 +289,7 @@ class XMLStackReader
      */
     public function printCurrentNode()
     {
-        if(KeePassPHP::DEBUG)
+        if(KeePassPHP::$debug)
         {
             $s = "";
             foreach($this->stack as $v)

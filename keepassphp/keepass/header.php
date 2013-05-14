@@ -201,7 +201,7 @@ class Header
 	 */
 	public function printHeader()
 	{
-		if(KeePassPHP::DEBUG)
+		if(KeePassPHP::$debug)
 		{
 			echo "<pre>",
 			"cipher := ", ($this->cipher == null ? "null" : CipherMcrypt::AES128),
