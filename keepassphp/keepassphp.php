@@ -58,6 +58,7 @@ require_once "display.php";
 abstract class KeePassPHP
 {
 	static private $started = false;
+	static private $iconmanager;
 	static private $dbmanager;
 	static private $kdbxmanager;
 	static private $keymanager;
@@ -107,8 +108,8 @@ abstract class KeePassPHP
 		self::$debug = "";
 		HashHouse::setDefault(self::DEFAULT_HASH);
 
-		IconRepository::Init(self::DIR_KEEPASSPHP . self::DIR_DATA .
-			self::DIR_ICONS, self::PREFIX_ICON);
+		self::$iconmanager = new IconManager(self::DIR_KEEPASSPHP .
+			self::DIR_DATA . self::DIR_ICONS, self::PREFIX_ICON, false, false);
 		self::$dbmanager = new FileManager(self::DIR_KEEPASSPHP .
 			self::DIR_DATA . self::DIR_SECURE . self::DIR_KPHPDB,
 			self::PREFIX_DATABASE, true, false);

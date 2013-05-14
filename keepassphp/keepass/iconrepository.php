@@ -27,48 +27,29 @@ class IconManager extends FileManager
  */
 class IconRepository
 {
-	/****************
-	 * static stuff *
-	 ****************/
-
-	private static $initialized = false;
-	private static $imanager;
-
 	const DEFAULT_EXT = "png";
-
-	public static function Init($dir, $prefix)
-	{
-		self::$imanager = new IconManager($dir, $prefix, false, false);
-		self::$initialized= true;
-	}
-
-	/********************
-	 * Non-static stuff *
-	 ********************/
 
 	private $writeable;
 	
 	public function __construct($canBeWritten = true)
 	{
-		if(!self::$initialized)
-			KeePassPHP::raiseError("Icon Repository not initialiazed.");
 		$this->writeable = $canBeWritten;
 	}
 
 	public function addIcon($uuid, $data, $writeable = true)
 	{
-		self::$imanager->addWithKey($uuid, $data, self::DEFAULT_EXT,
+		KeePassPHP::$iconmanager->addWithKey($uuid, $data, self::DEFAULT_EXT,
 			$writeable && $this->writeable);
 	}
 
 	public function getIconForDisplay($uuid)
 	{
-		$res = self::$imanager->getRawElementFromKey($uuid);
+		$res = KeePassPHP::$iconmanager->getRawElementFromKey($uuid);
 		if($res != null && is_array($res) && count($res) > 1)
 		{
 			list($type, $ext, $content) = $res;
 			if($type == FileManager::TYPE_FILE)
-				return self::$imanager->prependDir($content);
+				return KeePassPHP::$iconmanager->prependDir($content);
 			else
 				return "data:image/" . $ext . ";base64," . $content;
 		}
