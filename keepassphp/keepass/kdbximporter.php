@@ -66,7 +66,7 @@ class KdbxImporter extends Database
 	 *
 	 * @return boolean
 	 */
-	public function load()
+	public function tryLoad()
 	{
 		if($this->loaded)
 			return $this->rawEntries != null;
@@ -81,7 +81,7 @@ class KdbxImporter extends Database
 		KeePassPHP::printDebug("Attempting to load database from ".$this->file);
 		if(!$this->tryParse(RessourceReader::openFile($this->file)))
 		{
-			KeePassPHP::raiseError("  ... attempt failed !");
+			KeePassPHP::printDebug("  ... attempt failed !");
 			return false;
 		}
 		KeePassPHP::printDebug("  ... attempt succeeded !");
@@ -95,7 +95,7 @@ class KdbxImporter extends Database
 	public function parseEntries()
 	{
 		$entries = array();
-		if(!$this->load())
+		if(!$this->tryLoad())
 			return $entries;
 		
 		foreach($this->rawEntries as $e)
@@ -125,7 +125,7 @@ class KdbxImporter extends Database
 	 */
 	public function getPassword($uuid)
 	{
-		if(!$this->load())
+		if(!$this->tryLoad())
 			return null;
 		
 		foreach($this->rawEntries as $e)

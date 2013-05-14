@@ -68,11 +68,11 @@ abstract class KeePassPHP
 {
 	static public $errordump;
 	static public $isError;
+	static public $iconmanager;
 	
 	static private $started = false;
 	static private $debug;
 
-	static private $iconmanager;
 	static private $dbmanager;
 	static private $kdbxmanager;
 	static private $keymanager;
@@ -249,18 +249,18 @@ abstract class KeePassPHP
 		$bindb = self::$dbmanager->getContentFromKey($dbid);
 		if($bindb == null)
 		{
-			self::raiseError("Database not found or void (ID=".$dbid.")");
+			self::printDebug("Database not found or void (ID=".$dbid.")");
 			return null;
 		}
 		$db = self::decryptUnserialize($bindb, $internalpwd);
 		if($db == false || !is_array($db) || count($db) < self::IDX_COUNT)
 		{
-			self::raiseError("Bad format, or wrong password (ID=".$dbid.")");
+			self::printDebug("Bad format, or wrong password (ID=".$dbid.")");
 			return null;
 		}
 		if($db[self::IDX_DBTYPE] != self::DBTYPE_KDBX)
 		{
-			self::raiseError("Types other than kbdx not yet supprted (ID=".$dbid.")");
+			self::printDebug("Types other than kbdx not yet supprted (ID=".$dbid.")");
 			return null;
 		}
 
@@ -298,7 +298,7 @@ abstract class KeePassPHP
 		$entries = $db[self::IDX_ENTRIES];
 		if(!is_array($entries) || count($entries) == 0)
 		{
-			if($kdbx->load())
+			if($kdbx->tryLoad())
 			{
 				$entries = $kdbx->parseEntries();
 				self::addInternal($dbid, $internalpwd, $db[self::IDX_HASHNAME],
@@ -443,7 +443,7 @@ abstract class KeePassPHP
 			}
 		}
 		$kdbx = new KdbxImporter($file, $ckey);
-		return $kdbx->load();
+		return $kdbx->tryLoad();
 	}
 
 	/**************************

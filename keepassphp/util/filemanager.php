@@ -28,36 +28,51 @@ class FileManager
     /**
      * Creates a new FileManager, storing files (if possible) in the directory
      * $dir, and using the prefix $prefix for filenames. If $filesonly is true,
-     * all the data will be stored with files (if possible), and if $memonly is
-     * true, no files will be used ($filesonly takes precedence if both are
-     * true). If files are allowed, the directory $dir will be scanned at the
-     * creation, to try and retrieve existing data.
-     * @param string $dir
-     * @param string $prefix
-     * @param boolean $filesonly
-     * @param boolean $memonly
-     */
+     * all the data will be stored with files (and thus be persistent), and if
+	 * $memonly is true, no files will be used (the data will thus not be
+	 * persistent). If both are true, $memonly takes precedence. If both are
+	 * false, the data will be stored in a file if possible, and in memory
+	 * otherwise.
+	 * If files are allowed, the directory $dir will be scanned to try and
+	 * retrieve existing data ; if it does not exist, it will be created, and
+	 * if this creation fails, or if the directory cannot be read and open, and
+	 * $filesonly is true (and $memonly is false), an exception will be thrown.
+	 *
+	 * @param string $dir The directory to use to store files.
+	 * @param string $prefix The prefix for filenames.
+	 * @param boolean $filesonly Whether only files must be used.
+	 * @param boolean $memonly Whether only memory must be used.
+	 * @throws Exception
+	 */
     public function __construct($dir, $prefix, $filesonly, $memonly = false)
     {
         $this->elements = array();
         $this->acceptMem = !$filesonly;
-        
-        if(($filesonly || !$memonly) && is_dir($dir) && $prefix != null &&
-            is_writable($dir) && $dh = opendir($dir))
-        {
-            $this->dir = $dir . (substr($dir, -1) == "/" ? "" : "/");
-            $this->prefix = $prefix;
-            $this->acceptFiles = true;
 
-            $pattern = "/^".$this->prefix."_([a-f0-9]+)\.(\w+)$/i";
-            $matches = array();
-            while(($file = readdir($dh)) !== false)
-                if(preg_match($pattern, $file, $matches))
-                    $this->elements[strtolower($matches[1])] =
-                        array(self::TYPE_FILE, strtolower($matches[2]), $file);
-        }
-        else
-            $this->acceptFiles = false;
+		if(!$memonly)
+		{
+			if((is_dir($dir) || mkdir($dir, 700, true)) && $prefix != null &&
+					is_writable($dir) && $dh = opendir($dir))
+			{
+				$this->dir = $dir . (substr($dir, -1) == "/" ? "" : "/");
+				$this->prefix = $prefix;
+				$this->acceptFiles = true;
+
+				$pattern = "/^".$this->prefix."_([a-f0-9]+)\.(\w+)$/i";
+				$matches = array();
+				while(($file = readdir($dh)) !== false)
+					if(preg_match($pattern, $file, $matches))
+	                    $this->elements[strtolower($matches[1])] = array(
+							self::TYPE_FILE, strtolower($matches[2]), $file);
+			}
+			elseif($filesonly)
+				throw new Exception("The directory " . $dir .
+					" does not exist and cannot be created.");
+			else
+				$this->acceptFiles = false;
+		}
+		else
+			$this->acceptFiles = false;
     }
 
     /******************

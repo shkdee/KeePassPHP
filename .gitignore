@@ -1,1 +1,5 @@
 /keepassphp/nbproject
+/keepassphp/data/secure/kdbx
+/keepassphp/data/secure/key
+/keepassphp/data/secure/kphpdb
+/keepassphp/data/icons

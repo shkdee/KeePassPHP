@@ -55,7 +55,7 @@ abstract class Database
 	 * Abstract stuff *
 	 ******************/
 	
-	public abstract function load();
+	public abstract function tryLoad();
 	public abstract function getPassword($uuid);
 	public abstract function parseEntries();
 
