@@ -45,7 +45,7 @@ class KdbxImporter extends Database
 	const XML_KEY_USERNAME = "UserName";
 	const XML_KEY_URL = "URL";
 
-	public function __construct($file, CompositeKey $key)
+	public function __construct($file, iKey $key)
 	{
 		parent::__construct();
 		$this->rawEntries = null;

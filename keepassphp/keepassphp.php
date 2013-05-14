@@ -274,7 +274,15 @@ abstract class KeePassPHP
 				$i++;
 			}
 			elseif($rk[0] == self::KEY_FILE)
-				$ckey->addKey(new KeyFromFile(self::$keymanager->getFile($rk[1])));
+			{
+				$filekey = new KeyFromFile(self::$keymanager->getFile($rk[1]));
+				if(!$filekey->isParsed)
+				{
+					self::printDebug("Key file parsing failure (ID=".$dbid.")");
+					return null;
+				}
+				$ckey->addKey($filekey);
+			}
 		}
 
 		$kdbx = new KdbxImporter(
@@ -417,7 +425,15 @@ abstract class KeePassPHP
 			if($k[0] == self::KEY_PWD)
 				$ckey->addKey(new KeyFromPassword(utf8_encode($k[1])));
 			elseif($k[0] == self::KEY_FILE)
-				$ckey->addKey(new KeyFromFile($k[1]));
+			{
+				$filekey = new KeyFromFile($k[1]);
+				if(!$filekey->isParsed)
+				{
+					self::printDebug("Key file parsing failure in checkKeys");
+					return false;
+				}
+				$ckey->addKey($filekey);
+			}
 		}
 		$kdbx = new KdbxImporter($file, $ckey);
 		return $kdbx->load();

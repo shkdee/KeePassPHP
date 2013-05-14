@@ -1,13 +1,18 @@
 <?php
 /**
- * A KeePass composite key, used in the decryption
- * of a database file. It takes several Keys (see
- * below) and hashes all of them toghether to build
- * the composite key.
- *
- * @author Louis
+ * An interface for a KeePass key, which is basically just in charge of
+ * providing a hash (as a binary string).
  */
-class CompositeKey
+interface iKey
+{
+	public function getHash();
+}
+
+/**
+ * A KeePass composite key, used in the decryption of a database file. It takes
+ * several iKeys and hashes all of them toghether to build the composite key.
+ */
+class CompositeKey implements iKey
 {
 	private $keys;
 
@@ -16,11 +21,19 @@ class CompositeKey
 		$this->keys = array();
 	}
 
-	public function addKey(Key $key)
+	/**
+	 * Adds the given key $key to this CompositeKey.
+	 * @param iKey $key The key to add.
+	 */
+	public function addKey(iKey $key)
 	{
 		array_push($this->keys, $key->getHash());
 	}
 
+	/**
+	 * Returns the hash of all the keys of this CompositeKey.
+	 * @return string Returns the hash as a binary string.
+	 */
 	public function getHash()
 	{
 		return HashHouse::hashArray($this->keys);
@@ -28,26 +41,25 @@ class CompositeKey
 }
 
 /**
- * An abstract KeePass key, which basically is just in
- * charge of providing a hash.
+ * An iKey build from something already hashed.
  */
-abstract class Key
-{
-	public abstract function getHash();
-}
-
-/**
- * A Key build from something already hashed.
- */
-class KeyFromHash extends Key
+class KeyFromHash implements iKey
 {
 	protected $hash;
 
+	/**
+	 * Stores the given hash, that should be a binary string.
+	 * @param string $h
+	 */
 	public function __construct($h)
 	{
 		$this->hash = $h;
 	}
 
+	/**
+	 * Retrieve the hash of this key.
+	 * @return string Returns the hash as a binary string.
+	 */
 	public function getHash()
 	{
 		return $this->hash;
@@ -55,10 +67,14 @@ class KeyFromHash extends Key
 }
 
 /**
- * A Key build from a passwod, i.e a string.
+ * An iKey build from a password, i.e a string.
  */
 class KeyFromPassword extends KeyFromHash
 {
+	/**
+	 * Stores the hash of the given password.
+	 * @param string $pwd The string to hash.
+	 */
 	public function __construct($pwd)
 	{
 		$this->hash = HashHouse::hash($pwd);
@@ -66,22 +82,38 @@ class KeyFromPassword extends KeyFromHash
 }
 
 /**
- * A Key build from a KeePass key file. Supports
- * XML, binary and hex files.
+ * An iKey built from a KeePass key file. Supports XML, binary and hex files.
+ * If the parsing of the file is successful, the property $isParsed is set to
+ * true, and false otherwise ; its value must then be checked when a new
+ * KeyFromFile object is created, to see whether something went wrong or not :
+ * if it false, the hash that this object may return will probably mean
+ * nothing.
  */
 class KeyFromFile extends KeyFromHash
 {
 	const XML_ROOT = "KeyFile";
 	const XML_KEY = "Key";
 	const XML_DATA = "Data";
-	
+
+	public $isParsed = false;
+
+	/**
+	 * Tries to parse the given file, to find the hash inside. If the parsing
+	 * went successfully, the property $this->isParsed is set to true, and to
+	 * false otherwise.
+	 * @param string $filename The name of the file to parse.
+	 */
 	public function __construct($filename)
 	{
-		if(!$this->tryParseXML($filename))
-			if(!$this->tryParse($filename))
-				KeePassPHP::raiseError("Key file parsing failure !");
+		if(!($this->isParsed = $this->tryParseXML($filename)))
+			$this->isParsed = $this->tryParse($filename);
 	}
 
+	/**
+	 * Tries to parse the given file as a binary or a hex file.
+	 * @param string $filename The name of the file to parse.
+	 * @return boolean Returns true in case of success, false otherwise.
+	 */
 	private function tryParse($filename)
 	{
 		$reader = RessourceReader::openFile($filename);
@@ -101,6 +133,11 @@ class KeyFromFile extends KeyFromHash
 		return false;
 	}
 
+	/**
+	 * Tries to parse the given file as a KeePass XML key file.
+	 * @param string $filename The name of the file to parse.
+	 * @return boolean Returns true in case of success, false otherwise.
+	 */
 	private function tryParseXML($filename)
 	{
 		$xml = new XMLStackReader();
