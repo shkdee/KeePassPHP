@@ -30,7 +30,7 @@ class Header
 	const MINIMAL_VERSION = 3;
 	const INNER_RANDOM_ARC4 = 1;
 	const INNER_RANDOM_SALSA20 = 2;
-	
+
 	public function __construct()
 	{
 		$this->cipher = null;
@@ -164,7 +164,7 @@ class Header
 		}
 		$this->headerHash = $dreader->GetDigest();
 	}
-	
+
 	/**
 	 * Returns true if every required information has
 	 * been found in the header, and false otherwise.
@@ -214,6 +214,6 @@ class Header
 			"</pre>";
 		}
 	}
-}   
+}
 
 ?>

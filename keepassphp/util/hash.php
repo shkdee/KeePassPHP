@@ -9,7 +9,7 @@
  */
 interface iHashAlgo
 {
-    public function hash($s);
+	public function hash($s);
 }
 
 /**
@@ -20,10 +20,10 @@ interface iHashAlgo
  */
 class HashSHA256 implements iHashAlgo
 {
-    public function hash($s)
-    {
-        return hash('SHA256', $s, true);
-    }
+	public function hash($s)
+	{
+		return hash('SHA256', $s, true);
+	}
 }
 
 /**
@@ -43,27 +43,27 @@ class HashSHA256 implements iHashAlgo
  */
 abstract class HashHouse
 {
-    static public $algo = "";
-    
-    public static function setDefault($str)
-    {
-        self::$algo = $str;
-    }
+	static public $algo = "";
+	
+	public static function setDefault($str)
+	{
+		self::$algo = $str;
+	}
 
-    public static function hash($s)
-    {
-        return hash(self::$algo, $s, true);
-    }
+	public static function hash($s)
+	{
+		return hash(self::$algo, $s, true);
+	}
 
-    public static function hashArray($a)
-    {
-        $h = hash_init(self::$algo);
-        foreach($a as $v)
-            hash_update($h, $v);
-        $r = hash_final($h, true);
-        unset($h);
-        return $r;
-    }
+	public static function hashArray($a)
+	{
+		$h = hash_init(self::$algo);
+		foreach($a as $v)
+			hash_update($h, $v);
+		$r = hash_final($h, true);
+		unset($h);
+		return $r;
+	}
 }
 
 ?>

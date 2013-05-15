@@ -11,10 +11,10 @@ abstract class StreamCipher
 	abstract public function getNextBytes($n);
 
 	public function dencrypt($s)
-    {
-        $x = $this->getNextBytes(strlen($s));
-        return $s ^ $x;
-    }
+	{
+		$x = $this->getNextBytes(strlen($s));
+		return $s ^ $x;
+	}
 }
 
 /*
