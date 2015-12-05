@@ -20,6 +20,7 @@ class FileManager
 	protected $dir;
 	protected $acceptFiles;
 	protected $acceptMem;
+	protected $load;
 
 	const DEFAULT_EXT = "bin";
 	const TYPE_FILE = 1;
@@ -48,31 +49,11 @@ class FileManager
 	{
 		$this->elements = array();
 		$this->acceptMem = !$filesonly;
+		$this->acceptFiles = !$memonly;
+		$this->loaded = false;
 
-		if(!$memonly)
-		{
-			if((is_dir($dir) || mkdir($dir, 700, true)) && $prefix != null &&
-					is_writable($dir) && $dh = opendir($dir))
-			{
-				$this->dir = $dir . (substr($dir, -1) == "/" ? "" : "/");
-				$this->prefix = $prefix;
-				$this->acceptFiles = true;
-
-				$pattern = "/^".$this->prefix."_([a-f0-9]+)\.(\w+)$/i";
-				$matches = array();
-				while(($file = readdir($dh)) !== false)
-					if(preg_match($pattern, $file, $matches))
-						$this->elements[strtolower($matches[1])] = array(
-							self::TYPE_FILE, strtolower($matches[2]), $file);
-			}
-			elseif($filesonly)
-				throw new Exception("The directory " . $dir .
-					" does not exist and cannot be created.");
-			else
-				$this->acceptFiles = false;
-		}
-		else
-			$this->acceptFiles = false;
+		$this->dir = $dir . (substr($dir, -1) == "/" ? "" : "/");
+		$this->prefix = $prefix;
 	}
 
 	/******************
@@ -142,6 +123,7 @@ class FileManager
 	 */
 	public function exists($h)
 	{
+		$this->load();
 		return array_key_exists($h, $this->elements);
 	}
 
@@ -170,6 +152,7 @@ class FileManager
 	 */
 	public function getRawElement($h)
 	{
+		$this->load();
 		if(array_key_exists($h, $this->elements))
 			return $this->elements[$h];
 		return null;
@@ -248,6 +231,36 @@ class FileManager
 	 *********************/
 
 	/**
+	 * Loads already-existing files in this FileManager, by scanning the
+	 * directory for matching file names (only if this FileManager accepts
+	 * files).
+	 */
+	protected function load()
+	{
+		if($this->loaded)
+			return;
+		if($this->acceptFiles)
+		{
+			if((is_dir($this->dir) || mkdir($this->dir, 700, true)) && $this->prefix != null &&
+					is_writable($this->dir) && $dh = opendir($this->dir))
+			{
+				$pattern = "/^".$this->prefix."_([a-f0-9]+)\.(\w+)$/i";
+				$matches = array();
+				while(($file = readdir($dh)) !== false)
+					if(preg_match($pattern, $file, $matches))
+						$this->elements[strtolower($matches[1])] = array(
+							self::TYPE_FILE, strtolower($matches[2]), $file);
+			}
+			elseif(!$this->acceptMem)
+				throw new Exception("The directory " . $this->dir .
+					" does not exist and cannot be created.");
+			else
+				$this->acceptFiles = false;
+		}
+		$this->loaded = true;
+	}
+
+	/**
 	 * If overriden in an extended class, performs an operation on the binary
 	 * string $value before it is saved to a file.
 	 * @param string $value
@@ -309,6 +322,7 @@ class FileManager
 	 */
 	protected function addElement($h, $v, $ext, $writeable, $override)
 	{
+		$this->load();
 		$fileexists = array_key_exists($h, $this->elements);
 		if(!$override && $fileexists)
 			return true;
