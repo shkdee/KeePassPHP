@@ -81,10 +81,10 @@ class KdbxImporter extends Database
 		KeePassPHP::printDebug("Attempting to load database from ".$this->file);
 		if(!$this->tryParse(RessourceReader::openFile($this->file)))
 		{
-			KeePassPHP::printDebug("  ... attempt failed !");
+			KeePassPHP::printDebug("  ... attempt failed!");
 			return false;
 		}
-		KeePassPHP::printDebug("  ... attempt succeeded !");
+		KeePassPHP::printDebug("  ... attempt succeeded!");
 		return true;
 	}
 
@@ -156,7 +156,7 @@ class KdbxImporter extends Database
 		$this->header->parse($reader);
 		if(!$this->header->check())
 		{
-			KeePassPHP::printDebug("Header check failed !");
+			KeePassPHP::printDebug("Header check failed!");
 			return false;
 		}
 
@@ -174,7 +174,7 @@ class KdbxImporter extends Database
 		if($decrypted == false || strcmp(substr($decrypted, 0,
 			Header::STARTBYTES_LEN), $this->header->startBytes) != 0)
 		{
-			KeePassPHP::printDebug("Decryption problem !");
+			KeePassPHP::printDebug("Decryption problem!");
 			return false;
 		}
 
@@ -192,7 +192,7 @@ class KdbxImporter extends Database
 			$decoded = gzdecode2($decoded);
 			if($decoded == null || strlen($decoded) == 0)
 			{
-				KeePassPHP::printDebug("UnGzipping failed !");
+				KeePassPHP::printDebug("UnGzipping failed!");
 				return false;
 			}
 		}
@@ -244,7 +244,7 @@ class KdbxImporter extends Database
 			{
 				$hash = base64_decode($this->readTextValueFromXML($xml));
 				if(strcmp($hash, $this->header->headerHash) != 0)
-					KeePassPHP::printDebug ("Bad HeaderHash !");
+					KeePassPHP::printDebug ("Bad HeaderHash!");
 				$isHeaderChecked = true;
 			}
 			elseif($xml->r->name == self::XML_CUSTOMICONS)

@@ -127,6 +127,17 @@ abstract class KeePassPHP
 		self::$debug = $debug;
 		self::$errordump = "";
 
+		if(!extension_loaded("mcrypt"))
+		{
+			self::raiseError("mcrypt must be loaded to use KeePassPHP");
+			return;
+		}
+		if(!defined("MCRYPT_RIJNDAEL_128"))
+		{
+			self::raiseError("Rijndael 128 is not supported by your libmcrypt (it is probably too old)");
+			return;
+		}
+
 		HashHouse::setDefault(self::DEFAULT_HASH);
 		self::$iconmanager = new IconManager(self::DIR_KEEPASSPHP .
 			self::DIR_DATA . self::DIR_ICONS, self::PREFIX_ICON, false, false);
@@ -139,7 +150,7 @@ abstract class KeePassPHP
 			self::DIR_DATA.self::DIR_SECURE.self::DIR_KEY, self::PREFEXT_KEY);
 
 		self::$started = true;
-		self::printDebug("KeePassPHP application started !");
+		self::printDebug("KeePassPHP application started!");
 	}
 
 	/****************************
@@ -242,7 +253,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::raiseError("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started!");
 			return null;
 		}
 
@@ -338,7 +349,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::raiseError("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started!");
 			return false;
 		}
 
@@ -384,7 +395,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::raiseError("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started!");
 			return false;
 		}
 		return self::$dbmanager->existsKey($dbid);
@@ -405,7 +416,7 @@ abstract class KeePassPHP
 	{
 		if(!self::$started)
 		{
-			self::raiseError("KeepassPHP is not started !");
+			self::raiseError("KeepassPHP is not started!");
 			return false;
 		}
 		$bindb = self::$dbmanager->getContentFromKey($dbid);
