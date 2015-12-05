@@ -192,7 +192,7 @@ class XMLStackReader
 	 */
 	public function isAncestor($a)
 	{
-		return array_search($a, $this->stack) !== false;
+		return array_search(strtolower($a), $this->stack) !== false;
 	}
 
 	/**

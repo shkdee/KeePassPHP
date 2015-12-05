@@ -284,12 +284,16 @@ class KdbxImporter extends Database
 				{
 					$key = null;
 					$value = null;
-					$isHistory = $xml->isAncestor(self::XML_HISTORY);
 					$inner = $xml->readInnerXML($xml->r->depth);
+					// we have to read it in all cases, even if it's inside
+					// a history element, in case it is a protected string
+					// value
 					if($this->tryReadTextValueFromArray($inner, self::XML_STRING_VALUE, $value)
 					  && $this->tryReadTextValueFromArray($inner, self::XML_STRING_KEY, $key))
-						if($key != null && $value != null && !$isHistory)
+					{
+						if(!empty($key) && !empty($value) && !$xml->isAncestor(self::XML_HISTORY))
 							$entry[$key] = $value;
+					}
 				}
 			}
 			if(count($entry) > 0)
