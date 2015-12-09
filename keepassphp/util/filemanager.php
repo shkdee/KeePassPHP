@@ -241,7 +241,7 @@ class FileManager
 			return;
 		if($this->acceptFiles)
 		{
-			if((is_dir($this->dir) || mkdir($this->dir, 700, true)) && $this->prefix != null &&
+			if((is_dir($this->dir) || mkdir($this->dir, 0700, true)) && $this->prefix != null &&
 					is_writable($this->dir) && $dh = opendir($this->dir))
 			{
 				$pattern = "/^".$this->prefix."_([a-f0-9]+)\.(\w+)$/i";

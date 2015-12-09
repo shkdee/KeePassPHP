@@ -67,6 +67,7 @@ class UploadManager extends FileManager
 	 */
 	protected function addElement($h, $v, $ext, $writeable, $override)
 	{
+		$this->load();
 		$fileexists = array_key_exists($h, $this->elements);
 		if((!$override && $fileexists))
 			return true;
