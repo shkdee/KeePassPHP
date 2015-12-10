@@ -31,6 +31,7 @@ class KdbxImporter extends Database
 	const XML_ROOT = "Root";
 	const XML_GROUP = "Group";
 	const XML_ENTRY = "Entry";
+	const XML_ICONID = "IconID";
 	const XML_CUSTOMICONUUID = "CustomIconUUID";
 	const XML_TAGS = "Tags";
 	//const XML_ENTRY_TIMES = "Times";
@@ -107,6 +108,8 @@ class KdbxImporter extends Database
 						self::XML_KEY_TITLE, parent::DEFAULT_TITLE);
 				$entry[parent::KEY_CUSTOMICON] = parent::getIfSet($e,
 						self::XML_CUSTOMICONUUID);
+				$entry[parent::KEY_ICON] = parent::getIfSet($e,
+						self::XML_ICONID);
 				$entry[parent::KEY_TAGS] = parent::getIfSet($e, self::XML_TAGS);
 				$entry[parent::KEY_URL] = parent::getIfSet($e, self::XML_KEY_URL);
 				$entry[parent::KEY_USERNAME] = parent::getIfSet($e,
@@ -278,6 +281,8 @@ class KdbxImporter extends Database
 					$entry[self::XML_UUID] = bin2hex(base64_decode($this->readTextValueFromXML($xml)));
 				elseif($xml->r->name == self::XML_CUSTOMICONUUID)
 					$entry[self::XML_CUSTOMICONUUID] = $this->readTextValueFromXML($xml);
+				elseif($xml->r->name == self::XML_ICONID)
+					$entry[self::XML_ICONID] = $this->readTextValueFromXML($xml);
 				elseif($xml->r->name == self::XML_TAGS)
 					$entry[self::XML_TAGS] = $this->readTextValueFromXML($xml);
 				elseif($xml->r->name == self::XML_STRING)

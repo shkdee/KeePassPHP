@@ -14,6 +14,7 @@ abstract class Database
 
 	const KEY_UUID = "UUID";
 	const KEY_CUSTOMICON = "CustomIcon";
+	const KEY_ICON = "Icon";
 	const KEY_TAGS = "Tags";
 	const KEY_TITLE = "Title";
 	const KEY_USERNAME = "UserName";

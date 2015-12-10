@@ -85,7 +85,6 @@ abstract class KeePassPHP
 	const PREFEXT_KEY = "key";
 	const PREFEXT_KDBX = "kdbx";
 
-	const DIR_KEEPASSPHP = "keepassphp/";
 	const DIR_DATA = "data/";
 	const DIR_ICONS = "icons/";
 	const DIR_SECURE = "secure/";
@@ -108,17 +107,19 @@ abstract class KeePassPHP
 	/**
 	 * Starts the KeePassPHP application. Must be called before any other method
 	 * of KeePassPHP. If $debug is true, debug and error data will be added in
-	 * the static variable KeePassPHP::$errordump ; if $debug is false,
+	 * the static variable KeePassPHP::$errordump; if $debug is false,
 	 * KeePass::$errordump will be non empty only if an error occurs.
 	 * Regardless of the value of $debug, the property KeePassPHP::$isError is
 	 * set to true if an error occurs. This way, a client application can check
 	 * if KeePassPHP detected an error, and retrieve some information from
 	 * KeePassPHP::$errordump (this information will probably not be useful
 	 * if $debug is false, though).
-	 * 
+	 *
+	 * @param string $keepassphpDir The relative path to the KeePassPHP
+	 *                              directory from the working directory.
 	 * @param boolean $debug True to enable debug mode, false otherwise.
 	 */
-	public static function init($debug = false)
+	public static function init($keepassphpDir, $debug = false)
 	{
 		if(self::$started)
 			return;
@@ -127,6 +128,11 @@ abstract class KeePassPHP
 		self::$debug = $debug;
 		self::$errordump = "";
 
+		if(!extension_loaded("hash"))
+		{
+			self::raiseError("hash must be loaded to use KeePassPHP");
+			return;
+		}
 		if(!extension_loaded("mcrypt"))
 		{
 			self::raiseError("mcrypt must be loaded to use KeePassPHP");
@@ -138,15 +144,16 @@ abstract class KeePassPHP
 			return;
 		}
 
+		$keepassphpDir = trim($keepassphpDir, '/') . '/';
 		HashHouse::setDefault(self::DEFAULT_HASH);
-		self::$iconmanager = new IconManager(self::DIR_KEEPASSPHP .
+		self::$iconmanager = new IconManager($keepassphpDir .
 			self::DIR_DATA . self::DIR_ICONS, self::PREFIX_ICON, false, false);
-		self::$dbmanager = new FileManager(self::DIR_KEEPASSPHP .
+		self::$dbmanager = new FileManager($keepassphpDir .
 			self::DIR_DATA . self::DIR_SECURE . self::DIR_KPHPDB,
 			self::PREFIX_DATABASE, true, false);
-		self::$kdbxmanager = new UploadManager(self::DIR_KEEPASSPHP .
+		self::$kdbxmanager = new UploadManager($keepassphpDir .
 			self::DIR_DATA.self::DIR_SECURE.self::DIR_KDBX, self::PREFEXT_KDBX);
-		self::$keymanager = new UploadManager(self::DIR_KEEPASSPHP .
+		self::$keymanager = new UploadManager($keepassphpDir .
 			self::DIR_DATA.self::DIR_SECURE.self::DIR_KEY, self::PREFEXT_KEY);
 
 		self::$started = true;
