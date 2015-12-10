@@ -3,3 +3,6 @@
 /keepassphp/data/secure/key
 /keepassphp/data/secure/kphpdb
 /keepassphp/data/icons
+sftp-config.json
+test.kdbx
+test.key
