@@ -1,8 +1,6 @@
-/keepassphp/nbproject
-/keepassphp/data/secure/kdbx
-/keepassphp/data/secure/key
-/keepassphp/data/secure/kphpdb
-/keepassphp/data/icons
+/keepassphp/data/kdbx
+/keepassphp/data/key
+/keepassphp/data/kphpdb
 sftp-config.json
 test.kdbx
 test.key
