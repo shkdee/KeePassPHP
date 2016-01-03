@@ -1,2 +1,2 @@
-DirectoryIndex disabled
-Options -Indexes
+Order deny,allow
+Deny from all

@@ -1,65 +1,229 @@
 <?php
 
-$count = isset($argc) ? intval($argc) : 0;
-if($count < 3)
+namespace KeePassPHP;
+
+function usageAndDie()
 {
-	echo "\nUsage: php keepassphp-cli.php <kdbx file path> <text password> [key file path]";
+	echo "Usage: php keepassphp-cli.php <command> [args...]",
+	     "\n\nPossible commands are:",
+	     "\n   add <id> <kdbx file> <password> [key file] [kphpdb password]   Adds a database",
+	     "\n   get <id> <password> [kphpdb password]                          Shows the content of a database",
+	     "\n   pwd <id> <n> <password> [kphpdb password]                      Gets a password",
+	     "\n   rem <id> <kphpdb password>                                     Removes a database",
+	     "\n   kdbx <kdbx file> <password> [key file]                         Decrypts a database file",
+	     "\n   kdbx-pwd <entry uuid> <kdbx file> <password> [key file]        Gets a password from a database file",
+	     "\n   encrypt <file> <password> [key file]                           Encrypts a file with the kdbx format",
+	     "\n   decrypt <file> <password> [key file]                           Decrypts a file encrypted with encrypt";
 	die();
 }
 
-$file = $argv[1];
-$pwd = $argv[2];
-$keyfile = $count >= 4 ? $argv[3] : null;
+function KPHPDebugAndDie($msg)
+{
+	echo "\nError: $msg\n", "Debug data:\n", KeePassPHP::$debugData, "\n";
+	die();
+}
 
-echo "Loading dabatase '", $file, "' (this may take some time)...\n";
+function errorAndDie($msg)
+{
+	echo "\nError: $msg\n";
+	die();
+}
 
-// loads classes
+function visitDatabase(Database $db)
+{
+	echo "Database '", $db->getName(), "'\n";
+	$groups = $db->getGroups();
+	if($groups == null)
+		echo "    (no groups)";
+	else
+	{
+		foreach($groups as &$g)
+			visitGroup($g, 4);
+	}
+}
+
+function visitGroup(Group $group, $indent)
+{
+	echo str_pad("", $indent, " "), "Group '", $group->name, "'\n";
+	if($group->groups != null)
+	{
+		foreach($group->groups as &$g)
+			visitGroup($g, $indent + 4);
+	}
+	if($group->entries == null)
+		echo str_pad("", $indent + 4, " "), "(no entries)\n";
+	else
+	{
+		foreach($group->entries as &$e)
+			visitEntry($e, $indent + 4);
+	}
+}
+
+function visitEntry(Entry $entry, $indent)
+{
+	echo str_pad("", $indent, " "),
+		$entry->uuid, "\t => ", $entry->title,
+		"\t", $entry->username,
+		"\t", $entry->url, "\n";
+}
+
+$count = isset($argc) ? intval($argc) : 0;
+if($count < 2)
+	usageAndDie();
+
+// load classes
 require_once "keepassphp/keepassphp.php";
 
-// initialize KeePassPHP ("true" to enable debug mode)
-KeePassPHP::init(true);
+// configuration
+$debugMode = true;
 
-// create a key with the password and possibly the key file
-$ckey = new CompositeKey();
-$ckey->addKey(new KeyFromPassword(utf8_encode($pwd))); // utf8_encode may be useless (or even unsuitable?) depending on where $pwd comes from
-if(!empty($keyfile))
-	$ckey->addKey(new KeyFromFile($keyfile));
+// execute command
+$command = $argv[1];
 
-// create the dabase, then try to load it (read the file, decrypt it, parse the xml inside)
-// The loading may take some time if your database is hard to decrypt.
-$db = new KdbxImporter($file, $ckey);
-if($db->tryLoad())
+if($command == "add")
 {
-	echo "... done!\n";
+	if($count < 5)
+		usageAndDie();
 
-	// get the password entries as a clean array
-	$entries = $db->parseEntries();
-	// $entries is now an associative array, whose keys are entries uuid,
-	// and values are arrays containing entries data. For example, assume
-	// that $uuid is a key, and $entry = $entries[$uuid], we have:
-	//
-	// $entry[Database::KEY_TITLE]      is the entry title
-	// $entry[Database::KEY_CUSTOMICON] is the custom icon uuid of this entry
-	// $entry[Database::KEY_TAGS]       is the entry tag field
-	// $entry[Database::KEY_URL]        is the entry url
-	// $entry[Database::KEY_USERNAME]   is the entry username
-	// $db->getPassword($uuid)          is the entry password
-	//
-	// The password was not included in the $entries array by design, but
-	// this may change in the future...
+	// initialize KeePassPHP
+	if(!KeePassPHP::init(null, $debugMode))
+		KPHPDebugAndDie("Initialization failed.");
 
-	// e.g print "<entry title> => <entry username>" for all entries
-	foreach($entries as $entry)
-		echo $entry[Database::KEY_TITLE], "\t => ", $entry[Database::KEY_USERNAME], "\n";
+	$dbid = $argv[2];
+	$file = $argv[3];
+	$pwd = $argv[4];
+	$keyfile = $count >= 6 ? $argv[5] : null;
+	$kphpdbPwd = $count >= 7 ? $argv[6] : null;
+	if(empty($kphpdbPwd))
+		$kphpdbPwd = KeePassPHP::extractHalfPassword($pwd);
 
-	// e.g print "<entry username>: <entry password>" for all entries
-	// (! this will print all your passwords, you may not want that, uncomment at your own risk !)
-	//foreach($entries as $uuid => $entry)
-	//	echo $entry[Database::KEY_USERNAME], ": ", $db->getPassword($uuid), "\n";
+	if(KeePassPHP::existsKphpDB($dbid))
+	{
+		if(!KeePassPHP::removeDatabase($dbid, $kphpdbPwd))
+			KPHPDebugAndDie("Database '" . $dbid .
+				"' already exists and cannot be deleted.");
+	}
+
+	if(!KeePassPHP::addDatabaseFromFiles($dbid, $file, $pwd, $keyfile,
+			$kphpdbPwd, true))
+		KPHPDebugAndDie("Cannot add database '" . $dbid . "'.");
+	echo "Database '", $dbid, "' added successfully.";
 }
+
+else if($command == "get" || $command == "pwd")
+{
+	$offset = $command == "pwd" ? 1 : 0;
+	if($count < 4 + $offset)
+		usageAndDie();
+
+	// initialize KeePassPHP
+	if(!KeePassPHP::init(null, $debugMode))
+		KPHPDebugAndDie("Initialization failed.");
+
+	$dbid = $argv[2];
+	$pwd = $argv[3 + $offset];
+	$kphpdbPwd = $count >= 5 + $offset ? $argv[4 + $offset] : null;
+	if(empty($kphpdbPwd))
+		$kphpdbPwd = KeePassPHP::extractHalfPassword($pwd);
+
+	$db = KeePassPHP::getDatabase($dbid, $kphpdbPwd, $pwd, $command == "pwd");
+	if($db == null)
+		KPHPDebugAndDie("Cannot get database '" . $dbid . "'.");
+
+	if($command == "pwd")
+	{
+		$r = $db->getPassword($argv[3]);
+		if($r == null)
+			echo "entry '", $argv[3], "' not found!";
+		else
+			echo $r;
+	}
+	else
+		visitDatabase($db);
+}
+
+else if($command == "rem")
+{
+	if($count < 4)
+		usageAndDie();
+
+	// initialize KeePassPHP
+	if(!KeePassPHP::init(null, $debugMode))
+		KPHPDebugAndDie("Initialization failed.");
+
+	$dbid = $argv[2];
+	$pwd = $argv[3];
+
+	if(KeePassPHP::removeDatabase($dbid, $pwd))
+		echo "Database '", $dbid, "' successfully removed.";
+	else
+		KPHPDebugAndDie("Cannot remove database '" . $dbid . "'.");
+}
+
+else if($command == "kdbx" || $command == "kdbx-pwd")
+{
+	// no need to initialize KeePassPHP here, since
+	// we're only using low-level API.
+
+	$offset = $command == "kdbx-pwd" ? 1 : 0;
+	if($count < 4 + $offset)
+		usageAndDie();
+
+	$file = $argv[2 + $offset];
+	$pwd = $argv[3 + $offset];
+	$keyfile = $count >= 5 + $offset ? $argv[4 + $offset] : null;
+
+	$ckey = KeePassPHP::masterKey();
+	KeePassPHP::addPassword($ckey, $pwd);
+	if(!KeePassPHP::addKeyFile($ckey, $keyfile))
+		errorAndDie("file key parsing error.");
+
+	// The loading may take some time if your database is hard to decrypt.
+	$error = null;
+	$db = KeePassPHP::openDatabaseFile($file, $ckey, $error);
+	if($db == null)
+		errorAndDie($error);
+	
+	if($command == "kdbx-pwd")
+	{
+		$r = $db->getPassword($argv[2]);
+		if($r == null)
+			echo "entry '", $argv[2], "' not found!";
+		else
+			echo $r;
+	}
+	else
+		visitDatabase($db);
+}
+
+else if($command == "encrypt" || $command == "decrypt")
+{
+	if($count < 4)
+		usageAndDie();
+
+	$fileContent = file_get_contents($argv[2]);
+	if(!$fileContent)
+		errrorAndDie("Cannot open file '" . $argv[2] . "'");
+	$pwd = $argv[3];
+	$keyfile = $count >= 5 ? $argv[4] : null;
+
+	$ckey = KeePassPHP::masterKey();
+	KeePassPHP::addPassword($ckey, $pwd);
+	if(!KeePassPHP::addKeyFile($ckey, $keyfile))
+		errorAndDie("file key parsing error.");
+
+	$error = null;
+	$result = $command == "encrypt"
+		? KeePassPHP::encryptInKdbx($fileContent, $ckey, 6000, $error)
+		: KeePassPHP::decryptFromKdbx($fileContent, $ckey, true, $error);
+	if($result === null)
+		KPHPDebugAndDie();
+	echo $result;
+}
+
 else
 {
-	echo "... failed!\n";
+	echo "\nUnkown command '", $command, "'.\n";
+	usageAndDie();
 }
-echo "\nDebug data:\n", KeepassPHP::$errordump;
 ?>

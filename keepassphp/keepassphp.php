@@ -1,6 +1,6 @@
 <?php
 
-/*
+/**
  * LICENSE: Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
@@ -26,6 +26,16 @@
  * @link       https://github.com/shkdee/KeePassPHP
  */
 
+namespace KeePassPHP;
+
+class KeePassPHPException extends \Exception
+{
+	public function __construct($message)
+	{
+		parent::__construct($message);
+	}
+}
+
 /*
  * here we include everything, we could use an autoload in the future but
  * the fact is that from the moment we want to decrypt a KeePass database,
@@ -34,61 +44,47 @@
  * sure we will try to add or get a database file.
  */
 
-/*
- * Not directly KeePass-related stuff (helpers, tools, etc)
- */
-require_once "util/binary.php";
-require_once "util/cipher.php";
-require_once "util/filemanager.php";
-require_once "util/gzdecode2.php";
-require_once "util/hash.php";
-require_once "util/reader.php";
-require_once "util/streamcipher.php";
-require_once "util/salsa20cipher.php";
-require_once "util/uploadmanager.php";
-require_once "util/xmlstackreader.php";
+require_once "vendor/random_compat-1.1.4/lib/random.php";
 
-/*
- * KeePass-related stuff
- */
-require_once "keepass/iconrepository.php";
-require_once "keepass/database.php";
-require_once "keepass/header.php";
-require_once "keepass/key.php";
-require_once "keepass/kdbximporter.php";
+require_once "util/cipher.php";
+require_once "util/reader.php";
+require_once "util/gzdecode2.php";
+require_once "util/salsa20stream.php";
+require_once "util/filemanager.php";
+//require_once "util/uploadmanager.php";
+require_once "util/protectedstring.php";
+
+require_once "lib/protectedxmlreader.php";
+require_once "lib/key.php";
+require_once "lib/kdbxheader.php";
+require_once "lib/kdbxfile.php";
+require_once "lib/database.php";
+require_once "lib/group.php";
+require_once "lib/entry.php";
+require_once "lib/kphpdb.php";
 
 /**
- * Main class of the KeePassPHP application.
- * Loads and adds databases, check and exploit results. Every kind of
- * interaction with KeePassPHP by a client application should be done through
- * this class, and through the objets yielded by this class (mainly Database
- * objects).
+ * Main entry point of the KeePassPHP application.
+ * Exposes the high-level API of KeePassPHP.
  */
 abstract class KeePassPHP
 {
-	static public $errordump;
-	static public $isError;
-	static public $iconmanager;
-	static public $debug;
+	static public $debugData = "";
+	static public $debug = false;
 	
-	static private $started = false;
-
-	static private $dbmanager;
-	static private $kdbxmanager;
-	static private $keymanager;
-	
-	const DEFAULT_HASH = "sha256";
-	
-	const EXT_KPHPDB = "kphpdb";
-	const PREFIX_ICON = "icon";
+	static private $_started = false;
+	static private $_kphpdbManager = null;
+	static private $_databaseManager = null;
+	static private $_keyManager = null;
+		
+	const PREFIX_KPHPDB = "kphpdb";
 	const PREFIX_DATABASE = "db";
+	const EXT_KDBX = "kdbx";
 	const PREFEXT_KEY = "key";
-	const PREFEXT_KDBX = "kdbx";
 
-	const DIR_DATA = "data/";
-	const DIR_ICONS = "icons/";
-	const DIR_SECURE = "secure/";
-	const DIR_KDBX = "kdbx/";
+	const DEFAULT_DATA_DIR = "data/";
+
+	const DIR_DATABASE = "db/";
 	const DIR_KPHPDB = "kphpdb/";
 	const DIR_KEY = "key/";
 
@@ -105,59 +101,52 @@ abstract class KeePassPHP
 	const IDX_COUNT = 5;
 
 	/**
-	 * Starts the KeePassPHP application. Must be called before any other method
-	 * of KeePassPHP. If $debug is true, debug and error data will be added in
-	 * the static variable KeePassPHP::$errordump; if $debug is false,
-	 * KeePass::$errordump will be non empty only if an error occurs.
-	 * Regardless of the value of $debug, the property KeePassPHP::$isError is
-	 * set to true if an error occurs. This way, a client application can check
-	 * if KeePassPHP detected an error, and retrieve some information from
-	 * KeePassPHP::$errordump (this information will probably not be useful
-	 * if $debug is false, though).
-	 *
-	 * @param string $keepassphpDir The relative path to the KeePassPHP
-	 *                              directory from the working directory.
-	 * @param boolean $debug True to enable debug mode, false otherwise.
+	 * Starts the KeePassPHP application. This method must be called before all
+	 * high-level methods of this class. If $debug is true, debug data will be
+	 * added to the static variable self::$debugData (especially when an error
+	 * occurs).
+	 * @param $dataDir Relative path to the KeePassPHP data directory. If null,
+	 *                 the default directory ./data/ is used.
+	 * @param $debug True to enable debug mode, false otherwise.
 	 */
-	public static function init($keepassphpDir, $debug = false)
+	public static function init($dataDir = null, $debug = false)
 	{
-		if(self::$started)
-			return;
+		if(self::$_started)
+			return true;
 		
-		self::$isError = false;
 		self::$debug = $debug;
-		self::$errordump = "";
 
 		if(!extension_loaded("hash"))
 		{
-			self::raiseError("hash must be loaded to use KeePassPHP");
-			return;
+			self::addDebug("hash must be loaded to use KeePassPHP.");
+			return false;
 		}
 		if(!extension_loaded("mcrypt"))
 		{
-			self::raiseError("mcrypt must be loaded to use KeePassPHP");
-			return;
+			self::addDebug("mcrypt must be loaded to use KeePassPHP.");
+			return false;
 		}
 		if(!defined("MCRYPT_RIJNDAEL_128"))
 		{
-			self::raiseError("Rijndael 128 is not supported by your libmcrypt (it is probably too old)");
-			return;
+			self::addDebug("Rijndael 128 is not supported by your libmcrypt (it is probably too old).");
+			return false;
 		}
 
-		$keepassphpDir = trim($keepassphpDir, '/') . '/';
-		HashHouse::setDefault(self::DEFAULT_HASH);
-		self::$iconmanager = new IconManager($keepassphpDir .
-			self::DIR_DATA . self::DIR_ICONS, self::PREFIX_ICON, false, false);
-		self::$dbmanager = new FileManager($keepassphpDir .
-			self::DIR_DATA . self::DIR_SECURE . self::DIR_KPHPDB,
-			self::PREFIX_DATABASE, true, false);
-		self::$kdbxmanager = new UploadManager($keepassphpDir .
-			self::DIR_DATA.self::DIR_SECURE.self::DIR_KDBX, self::PREFEXT_KDBX);
-		self::$keymanager = new UploadManager($keepassphpDir .
-			self::DIR_DATA.self::DIR_SECURE.self::DIR_KEY, self::PREFEXT_KEY);
+		if($dataDir === null)
+			$dataDir = dirname(__FILE__) . '/' . self::DEFAULT_DATA_DIR;
+		else
+			$dataDir = trim($dataDir, '/') . '/';
 
-		self::$started = true;
-		self::printDebug("KeePassPHP application started!");
+		self::$_kphpdbManager = new FileManager(
+			$dataDir . self::DIR_KPHPDB, self::PREFIX_KPHPDB, true, false);
+		self::$_databaseManager = new FileManager(
+			$dataDir . self::DIR_DATABASE, self::PREFIX_DATABASE, true, false);
+		self::$_keyManager = new FileManager(
+			$dataDir . self::DIR_KEY, self::PREFEXT_KEY, true, false);
+
+		self::$_started = true;
+		self::addDebug("KeePassPHP application started.");
+		return true;
 	}
 
 	/****************************
@@ -165,389 +154,471 @@ abstract class KeePassPHP
 	 ****************************/
 
 	/**
-	 * Sets self::$isError to true, and adds the given error message $msg to
-	 * the error dump if debug mode is enabled.
-	 * @param string $msg The error message.
+	 * Adds $e to the debug data if debug mode is on.
+	 * @param $e An exception.
 	 */
-	public static function raiseError($msg)
-	{
-		self::$isError = true;
-		self::$errordump .= "An unexpected error occured" . (self::$debug ?
-			": " . self::makePrintable($msg) : ". That's all we know.") . "\n";
-		//die();
-	}
-
-	/**
-	 * Adds the given string to the debug data if debug mode is on.
-	 * @param string $msg The string to add to the debug data.
-	 */
-	public static function printDebug($msg)
+	public static function raiseError(\Exception $e)
 	{
 		if(self::$debug)
-			self::$errordump .= self::makePrintable($msg) . "\n";
+			self::$debugData .= "Exception at " . basename($e->getFile()) . ":"
+				. $e->getLine() . ": " . self::makePrintable($e->getMessage())
+				. "\n";
 	}
 
 	/**
-	 * Adds the given debug string $msg, then the given binary string $bin as an
-	 * hex string, to the debug data if debug mode is on.
-	 * @param string $msg The 'normal' string to add to the debug data.
-	 * @param string $bin The binary string to print in hexa.
+	 * Adds $msg to the debug data if debug mode is on.
+	 * @param $msg A printable string.
 	 */
-	public static function printDebugHexa($msg, $bin)
+	public static function addDebug($msg)
 	{
 		if(self::$debug)
-			self::$errordump .= self::makePrintable($msg . " :: " .
-				Binary::fromString($bin)->asHexString()) . "\n";
+			self::$debugData .= self::makePrintable($msg) . "\n";
 	}
 
 	/**
-	 * Adds the given debug string $msg, then the given array $array (with
-	 * print_r), to the debug data if debug mode is on.
-	 * @param string $msg The string to add to the debug data.
-	 * @param array $array The array to add to the debug data.
+	 * Adds $msg, then $bin in hexadecimal, to the debug data.
+	 * @param $msg A printable string.
+	 * @param $bin A binary string.
 	 */
-	public static function printDebugArray($msg, $array)
+	public static function addDebugHexa($msg, $bin)
+	{
+		if(self::$debug)
+			self::$debugData .= self::makePrintable($msg) . ": " .
+				self::strToHex($bin) . "\n";
+	}
+
+	/**
+	 * Adds $msg, then $var (with print_r), to the debug data.
+	 * @param $msg A printable stirng.
+	 * @param $var An object or a value.
+	 */
+	public static function addVar($msg, $var)
 	{
 		if(self::$debug)
 		{
-			ob_start();
-			print_r($array);
-			self::$errordump .= self::makePrintable($msg . " :: " .
-					ob_get_contents()) . "\n";
-			ob_end_clean();
+			self::$debugData .= self::makePrintable($msg) . ": " .
+				self::makePrintable(print_r($var, true)) . "\n";
 		}
 	}
 
+	/**************************
+	 * Util string operations *
+	 **************************/
+
 	/**
-	 * Returns the string in a html-printable format : encoded in UTF8, and with
-	 * some special chars rightly encoded. Every piece of data printed in a web
-	 * page and coming from KeePassPHP (either a password, an username, or a
-	 * debug stuff, *anything*) should be 'protected' by this method.
-	 * @param string $s The string to make html-printable.
-	 * @return string A sanitized string.
+	 * Computes the hexadecimal form of the bytes of $str.
+	 * @param $str A string.
+	 * @return A string of all hexadecimal codes of bytes of $str.
+	 */
+	public static function strToHex($str)
+	{
+		$r = "";
+		$l = strlen($str);
+		for($i = 0; $i < $l; $i++)
+			$r .= str_pad(strtoupper(dechex(ord($str[$i]))), 2, " ",
+				STR_PAD_LEFT) . " ";
+		return $r;
+	}
+
+	/**
+	 * Makes the string $s HTML-printable.
+	 * @param $s An UTF-8 string.
+	 * @return A sanitized string.
 	 */
 	public static function makePrintable($s)
 	{
-		return htmlspecialchars(utf8_encode($s), ENT_QUOTES, 'UTF-8');
+		return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 	}
 
-	/***********************************
-	 * Databases access and management *
-	 ***********************************/
-
 	/**
-	 * Tries to get the KeePass database corresponding the the ID $dbid, whose
-	 * internal password is $internalpwd and master password is $keypwd.
-	 * $internalpwd is the password needed to decrypt the KeePassPHP's internal
-	 * database, which contains the name of the KeePass database file, and the
-	 * possible key files which are already kept by KeePassPHP ; and $keypwd is
-	 * the textual password needed to decrypt the KeePass database file. They
-	 * may be the same (this is even recommended for the sake of simplicity).
-	 * Note that this method does not usually try to decrypt the KeePass
-	 * database file (only the KeePassPHP internal database), except if the
-	 * internal database does not contain information about the entries of the
-	 * KeePass database, which should happen only the very first time it is get
-	 * (and the corresponding data is then stored in the internal database).
-	 * @param string $dbid The ID of the database.
-	 * @param string $internalpwd The internal password, needed to decrypt the
-	 * KeePassPHP internal database.
-	 * @param string $keypwd The master password, needed to decrypt the KeePass
-	 * database file.
-	 * @return null|\KdbxImporter Returns a Databse object able to read the
-	 * KeePass database, or null if something went wrong.
+	 * Extracts a subpart of the input string if it long enough.
+	 * @param $pwd A password, that should be longer than 4 characters.
+	 * @return A subpart of the input string.
 	 */
-	public static function get($dbid, $internalpwd, $keypwd)
+	public static function extractHalfPassword($pwd)
 	{
-		if(!self::$started)
-		{
-			self::raiseError("KeepassPHP is not started!");
-			return null;
-		}
-
-		$bindb = self::$dbmanager->getContentFromKey($dbid);
-		if($bindb == null)
-		{
-			self::printDebug("Database not found or void (ID=".$dbid.")");
-			return null;
-		}
-		$db = self::decryptUnserialize($bindb, $internalpwd);
-		if($db == false || !is_array($db) || count($db) < self::IDX_COUNT)
-		{
-			self::printDebug("Bad format, or wrong password (ID=".$dbid.")");
-			return null;
-		}
-		if($db[self::IDX_DBTYPE] != self::DBTYPE_KDBX)
-		{
-			self::printDebug("Types other than kbdx not yet supprted (ID=".$dbid.")");
-			return null;
-		}
-
-		$ckey = new CompositeKey();
-		$i = 0;
-		foreach($db[self::IDX_KEYS] as $rk)
-		{
-			if($rk[0] == self::KEY_PWD)
-			{
-				if($i == 0)
-					$ckey->addKey(new KeyFromPassword(utf8_encode($keypwd)));
-				else
-				{
-					self::raiseError("Having more than one textual password" .
-						" is not yet possible (ID=".$dbid.")");
-					return null;
-				}
-				$i++;
-			}
-			elseif($rk[0] == self::KEY_FILE)
-			{
-				$filekey = new KeyFromFile(self::$keymanager->getFile($rk[1]));
-				if(!$filekey->isParsed)
-				{
-					self::raiseError("Key file parsing failure (ID=".$dbid.")");
-					return null;
-				}
-				$ckey->addKey($filekey);
-			}
-		}
-
-		$kdbx = new KdbxImporter(
-			self::$kdbxmanager->getFile($db[self::IDX_HASHNAME]), $ckey);
-
-		$entries = $db[self::IDX_ENTRIES];
-		if(!is_array($entries) || count($entries) == 0)
-		{
-			if($kdbx->tryLoad())
-			{
-				$entries = $kdbx->parseEntries();
-				self::addInternal($dbid, $internalpwd, $db[self::IDX_HASHNAME],
-					$db[self::IDX_KEYS], $entries, $db[self::IDX_WRITEABLE]);
-				$kdbx->useEntries($entries);
-			}
-			else
-				self::printDebug("Trying to go on with no entries... (ID=".$dbid.")");
-		}
+		$l = strlen($pwd);
+		if($l < 4)
+			return $pwd;
 		else
-			$kdbx->useEntries($entries);
+			return substr($pwd, 0, intval(floor($l/2)));
+	}
 
-		return $kdbx;
+	/**********************************
+	 * High-level database management *
+	 **********************************/
+
+	/**
+	 * Tries to decrypts the database of id $dbid, and extracts the password
+	 * of the entry whose uuid is $uuid from it.
+	 * @param $dbid A database ID.
+	 * @param $kphpdbPwd The password of the KphpDB file.
+	 * @param $dbPwd The password of the database file.
+	 * @param $uuid An entry uuid in base64.
+	 * @return The password as a string, or null in case of error.
+	 */
+	public static function getPassword($dbid, $kphpdbPwd, $dbPwd, $uuid)
+	{
+		$db = self::getDatabase($dbid, $kphpdbPwd, $dbPwd, true);
+		return $db == null ? null : $db->getPassword($uuid);
 	}
 
 	/**
-	 * Tries to add the database $kdbxfile to KeePassPHP, using the ID $dbid,
-	 * the internal password $internalpwd, and the master key composed of the
-	 * keys $keys. If the ID already exists, the corresponding database will
-	 * be overriden.
-	 * $kdbxfile should be the temporary filename of the file, as just uploaded
-	 * by PHP. KeePassPHP will perform itself move_uploaded_file. Likewise, the
-	 * key filenames in $keys should be the temporary filenames as just uploaded
-	 * by PHP, and will be moved by KeePassPHP.
-	 * The internal password is used to encrypt the internal data kept by
-	 * KeePassPHP, whereas the passwords in $keys are used to build the master
-	 * key to decrypt the KeePass database file. The internal password may be
-	 * part of the master key (this is even recommended for the sake of
-	 * simplicity).
-	 * @param string $kdbxfile The temporary filename of the KeePass database.
-	 * @param string $dbid The ID to use.
-	 * @param string $internalpwd The internal password.
-	 * @param array $keys The keys composing the master key of the database.
-	 * @return boolean Returns true in case of success, false otherwise.
+	 * Gets the database of id $dbid from the internal KeePassPHP database.
+	 * It may be a cached version with no passwords, cheaper to decrypt.
+	 * @param $dbid A database ID.
+	 * @param $kphpdbPwd The password of the KphpDB file.
+	 * @param $dbPwd The password of the database file (may be unused if a
+	 *        cached version exists and if $withPasswords is false).
+	 * @param $withPasswords Whether the real database file with passwords
+	 *        must be returned. Otherwise, the passwordless, cached version
+	 *        will be returned if it exists.
+	 * @return A Database instance, or null if an error occured.
 	 */
-	public static function tryAdd($kdbxfile, $dbid, $internalpwd, array $keys)
+	public static function getDatabase($dbid, $kphpdbPwd, $dbPwd,
+		$withPasswords)
 	{
-		if(!self::$started)
+		if(!self::$_started)
 		{
-			self::raiseError("KeepassPHP is not started!");
+			self::addDebug("KeepassPHP is not started!");
+			return null;
+		}
+
+		try
+		{
+			$kphpdb = self::openKphpDB($dbid, $kphpdbPwd);
+
+			$db = null;
+			if(!$withPasswords && $kphpdb->getDBType() == KphpDB::DBTYPE_KDBX)
+			{
+				$db = $kphpdb->getDB();
+				if($db != null)
+					return $db;
+			}
+
+			$dbContent = self::$_databaseManager->getContent(
+				$kphpdb->getDBFileHash());
+			if(empty($dbContent))
+				throw new KeePassPHPException("Database file not found (hash = "
+					. $kphpdb->getDBFileHash() . ")");
+
+			$rawKey = null;
+			$keyFileHash = $kphpdb->getKeyFileHash();
+			if(!empty($keyFileHash))
+			{
+				$rawKey = self::$_keyManager->getContent($keyFileHash);
+				if($rawKey == null)
+					throw new KeePassPHPException("Key file not found (ID = "
+						. $dbid . ")");
+			}
+			return self::openDatabase($dbContent, $dbPwd, $rawKey);
+		}
+		catch(KeePassPHPException $exception)
+		{
+			self::raiseError($exception);
+			return null;
+		}
+	}
+
+	/**
+	 * Adds a database to the internal KeePassPHP database, with the id $dbid.
+	 * $dbid must not exist already. A cached version with no passwords,
+	 * cheaper to decrypt, may be stored as well.
+	 * @param $dbid A database ID.
+	 * @param $dbFile The path of the KeePass database file.
+	 * @param $dbPwd The password of the database file.
+	 * @param $dbKeyFile The path of a key file for the database file, if
+	 *        applicable (use null otherwise).
+	 * @param $kphpdbPwd A password to use to create the KphpDB file.
+	 * @param $cache Whether to also create a passwordless, cached version.
+	 * @return true in case of success, false otherwise.
+	 */
+	public static function addDatabaseFromFiles($dbid, $dbFile, $dbPwd,
+		$dbKeyFile, $kphpdbPwd, $cache)
+	{
+		if(empty($dbFile))
+		{
+			self::raiseError(new KeePassPHPException('$dbFile is empty'));
+			return false;
+		}
+		return self::addDatabase($dbid, file_get_contents($dbFile), $dbPwd,
+			empty($dbKeyFile) ? null : file_get_contents($dbKeyFile),
+			$kphpdbPwd, $cache);
+	}
+
+	/**
+	 * Adds a database to the internal KeePassPHP database, with the id $dbid.
+	 * $dbid must not exist already. A cached version with no passwords,
+	 * cheaper to decrypt, may be stored as well.
+	 * @param $dbid A database ID.
+	 * @param $dbContent The content of the KeePass database file, as a string.
+	 * @param $dbPwd The password of the database file.
+	 * @param $dbKeyContent The content of a key file for the database file, as
+	 *        a string (if applicable; use null otherwise).
+	 * @param $kphpdbPwd A password to use to create the KphpDB file.
+	 * @param $cache Whether to also create a passwordless, cached version.
+	 * @return true in case of success, false otherwise.
+	 */
+	public static function addDatabase($dbid, $dbContent, $dbPwd,
+		$dbKeyContent, $kphpdbPwd, $cache)
+	{
+		if(!self::$_started)
+		{
+			self::addDebug("KeepassPHP is not started!");
 			return false;
 		}
 
-		$nkeys = array();
-		foreach($keys as $k)
+		try
 		{
-			if($k[0] == self::KEY_PWD)
-				$nkeys[] = array(self::KEY_PWD);
-			elseif($k[0] == self::KEY_FILE)
+			if(self::$_kphpdbManager->existsKey($dbid))
+				throw new KeePassPHPException("ID already exists.");
+
+			// check that the database being added can be opened
+			$db = self::openDatabase($dbContent, $dbPwd, $dbKeyContent);
+
+			// add it to the db manager
+			$dbHash = self::$_databaseManager->addWithKey(random_bytes(32),
+				$dbContent, self::EXT_KDBX, true, true);
+			if($dbHash == null)
+				throw new KeePassPHPException("Database file writing failed.");
+
+			// try to add the key file if it exists
+			$keyFileHash = null;
+			if(!empty($dbKeyContent))
 			{
-				$h = KeePassPHP::addKeyFile($k[1]);
-				if($h == null)
-				{
-					self::raiseError("Key file upload failed.");
-					return false;
-				}
-				$nkeys[] = array(KeePassPHP::KEY_FILE, $h);
+				$keyFileHash = self::$_keyManager->addWithKey(random_bytes(32),
+					$dbKeyContent, self::PREFEXT_KEY, true, true);
+				if($keyFileHash == null)
+					throw new KeePassPHPException("Key file writing failed.");
 			}
+
+			// build the KphpDB instance
+			$kphpdb = $cache
+				? KphpDB::createFromDatabase($db, $dbHash, $keyFileHash)
+				: KphpDB::createEmpty($dbHash, $keyFileHash);
+			$error = null;
+			$kphpdbContent = $kphpdb->toKdbx(
+				new KeyFromPassword($kphpdbPwd, KdbxFile::HASH), $error);
+			if($kphpdbContent == null)
+				throw new KeePassPHPException($error);
+
+			// add the KphpDB instance
+			$dbidHash = self::$_kphpdbManager->addWithKey($dbid,
+				$kphpdbContent, self::EXT_KDBX, true, true);
+			if($dbidHash == null)
+				throw new KeePassPHPException("KphpDB file writing failed.");
+			return true;
 		}
-		$hashname = KeePassPHP::addKdbxFile($kdbxfile);
-		if($hashname == null)
+		catch(KeePassPHPException $exception)
 		{
-			self::raiseError("Database file upload failed.");
+			self::raiseError($exception);
 			return false;
 		}
-		if(KeePassPHP::addInternal($dbid, $internalpwd, $hashname, $nkeys,
-				array(), true) == null)
+	}
+
+	/**
+	 * Removes the database of id $dbid from the internal KeePassPHP database.
+	 * @param $dbid A database ID.
+	 * @param $kphpdbPwd The password of the KphpDB file.
+	 * @return true if the database $dbid existed and could be removed,
+	 *         false otherwise.
+	 */
+	public static function removeDatabase($dbid, $kphpdbPwd)
+	{
+		if(!self::$_started)
 		{
-			self::raiseError("Internal database write failed.");
+			self::addDebug("KeepassPHP is not started!");
 			return false;
 		}
+
+		try
+		{
+			$kphpdb = self::openKphpDB($dbid, $kphpdbPwd);
+			$hash = $kphpdb->getDBFileHash();
+			if($hash !== null)
+			{
+				if(!self::$_databaseManager->remove($hash))
+					self::addDebug("Cannot delete database '" . $hash . "'.");
+			}
+			$hash = $kphpdb->getKeyFileHash();
+			if($hash !== null)
+			{
+				if(!self::$_keyManager->remove($hash))
+					self::addDebug("Cannot delete key file '" . $hash . "'.");
+			}
+			return self::$_kphpdbManager->removeFromKey($dbid);
+		}
+		catch(KeePassPHPException $exception)
+		{
+			self::raiseError($exception);
+			return false;
+		}
+	}
+
+	/**
+	 * Checks whether a database of id $dbid exists in the internal KeePassPHP
+	 * database.
+	 * @param $dbid A database ID.
+	 * @return true if $dbid exists, false otherwise.
+	 */
+	public static function existsKphpDB($dbid)
+	{
+		if(!self::$_started)
+		{
+			self::addDebug("KeepassPHP is not started!");
+			return false;
+		}
+		return self::$_kphpdbManager->existsKey($dbid);
+	}
+
+	/**
+	 * Checks whether the internal KeePassPHP password for the id $dbid is
+	 * $kphpdbPwd.
+	 * @param $dbid A database ID.
+	 * @param $kphpdbPwd The password of the KphpDB file.
+	 * @return true $kphpdbPwd is the password for the id $dbid.
+	 */
+	public static function checkKphpDBPassword($dbid, $kphpdbPwd)
+	{
+		if(!self::$_started)
+		{
+			self::addDebug("KeepassPHP is not started!");
+			return false;
+		}
+		try
+		{
+			$kphpdb = self::openKphpDB($dbid, $kphpdbPwd);
+			return true;
+		}
+		catch(KeePassPHPException $e)
+		{
+			self::raiseError($e);
+			return false;
+		}
+	}
+
+	
+	/***************************
+	 * Low-level API shortcuts *
+	 ***************************/
+
+	/**
+	 * Creates a KeePass master key.
+	 * @return A new CompositeKey instance.
+	 */
+	public static function masterKey()
+	{
+		return new CompositeKey(KdbxFile::HASH);
+	}
+
+	/**
+	 * Creates a key from a password.
+	 * @param $pwd A text password.
+	 * @return A new KeyFromPassword instance.
+	 */
+	public static function keyFromPassword($pwd)
+	{
+		return new KeyFromPassword($pwd, KdbxFile::HASH);
+	}
+
+	/**
+	 * Adds a password to a master key.
+	 * @param $mkey A master key.
+	 * @param $pwd A text password.
+	 * @return true if the operation succeeded, false otherwise.
+	 */
+	public static function addPassword(CompositeKey $mkey, $pwd)
+	{
+		$mkey->addKey(self::keyFromPassword($pwd));
 		return true;
 	}
 
 	/**
-	 * Returns true if the ID $dbid already exists in KeePassPHP internal
-	 * database.
-	 * @param string $dbid The ID to check.
-	 * @return boolean Returns true if the given ID already exists, false
-	 * otherwise.
+	 * Adds a file key to a master key.
+	 * @param $mkey A master key.
+	 * @param $file The path of a file key.
+	 * @return true if the operation succeeded, false otherwise.
 	 */
-	public static function exists($dbid)
+	public static function addKeyFile(CompositeKey $mkey, $file)
 	{
-		if(!self::$started)
-		{
-			self::raiseError("KeepassPHP is not started!");
+		if(empty($file))
+			return true;
+		$k = new KeyFromFile(file_get_contents($file));
+		if(!$k->isParsed)
 			return false;
-		}
-		return self::$dbmanager->existsKey($dbid);
+		$mkey->addKey($k);
+		return true;
 	}
 
 	/**
-	 * Checks whether the given password $internalpwd can decrypt the KeePassPHP
-	 * internal database data corresponding to the ID $dbid. This method does
-	 * not try to decrypt the KeePass database file, it only deals with
-	 * KeePassPHP internal data.
-	 * @param string $dbid The ID of the data to test.
-	 * @param string $internalpwd The password to decrypt the internal database
-	 * data corresponding to the given ID.
-	 * @return boolean Returns true if the decryption was successful, and false
-	 * otherwise.
+	 * Opens a KeePass password database (.kdbx) file with the key $mkey.
+	 * @param $file The path of a KeePass password database file.
+	 * @param $mkey A master key.
+	 * @param &$error A string that will receive a message in case of error.
+	 * @return A new Database instance, or null in case of error.
 	 */
-	public static function checkPassword($dbid, $internalpwd)
+	public static function openDatabaseFile($file, iKey $mkey, &$error)
 	{
-		if(!self::$started)
+		$reader = ResourceReader::openFile($file);
+		if($reader == null)
 		{
-			self::raiseError("KeepassPHP is not started!");
-			return false;
-		}
-		$bindb = self::$dbmanager->getContentFromKey($dbid);
-		$result = self::decryptUnserialize($bindb, $internalpwd);
-		return $result !== false;
-	}
-
-	/**
-	 * Checks whether the master key composed of the keys $keys can decrypt the
-	 * KeePass file $file. This functions actually tries to perform the
-	 * decryption of the KeePass database, and can thus be computationally
-	 * intensive. It is the only one that can check whether keys for a KeePass
-	 * database file are good or not.
-	 * @param string $file The filename of the KeePass database file to check.
-	 * @param array $keys The keys composing the master key of the database.
-	 * @return boolean Returns true if the decryption was successful, and false
-	 * otherwise.
-	 */
-	public static function checkKeys($file, array $keys)
-	{
-		$ckey = new CompositeKey();
-		foreach($keys as $k)
-		{
-			if($k[0] == self::KEY_PWD)
-				$ckey->addKey(new KeyFromPassword(utf8_encode($k[1])));
-			elseif($k[0] == self::KEY_FILE)
-			{
-				$filekey = new KeyFromFile($k[1]);
-				if(!$filekey->isParsed)
-				{
-					self::raiseError("Key file parsing failure in checkKeys");
-					return false;
-				}
-				$ckey->addKey($filekey);
-			}
-		}
-		$kdbx = new KdbxImporter($file, $ckey);
-		return $kdbx->tryLoad();
-	}
-
-	/**************************
-	 * Specific add functions *
-	 **************************
-	 * These functions may be made private, but it might serve some specific
-	 * client application to be able to use them. Do not try to do so if you
-	 * are not sure of what you're doing, though.
-	 */
-
-	/**
-	 * Adds the uploaded file $file to the repository of KeePass database files.
-	 * @param string $file The temporary filename of the KeePass database file
-	 * to add (as just uploaded by PHP).
-	 * @return string|null Returns null if something went wrong, and the name
-	 * of the resulting file otherwise.
-	 */
-	public static function addKdbxFile($file)
-	{
-		return self::$kdbxmanager->add($file, self::PREFEXT_KDBX, true, true);
-	}
-
-	/**
-	 * Adds the key file $file to the repository of key files.
-	 * @param string $file The temporary filename of the key file to add (just
-	 * as uploaded by PHP).
-	 * @return string|null Returns null if something went wrong, and the name of
-	 * the resulting file otherwise.
-	 */
-	public static function addKeyFile($file)
-	{
-		return self::$keymanager->add($file, self::PREFEXT_KEY, true, true);
-	}
-
-	/**
-	 * Stores internally the given data of a KeePass database file with the
-	 * index $dbid, to make it possible to find it later from that same index.
-	 * This methods basically packs all together in an array $hashname (the
-	 * filename of the actual KeePass database file), $keys (the description of
-	 * the master key: what kinds of keys compose it, in which order, and for
-	 * the key from files, the filenames of these files), $entries (the list of
-	 * entries of the database, without the passwords ; they are written only if
-	 * $writable is true) and $writeable, then serialize it and encrypts it with
-	 * the password $internalpwd, and stores the result in a kphpdb file.
-	 * If the index $dbid already exists, the corresponding data will be
-	 * overriden.
-	 * @param string $dbid The ID to use.
-	 * @param string $internalpwd The internal password to encrypt the data in
-	 * the KeePassPHP internal database with.
-	 * @param string $hashname The filename of the KeePass database file.
-	 * @param array $keys The type of keys composing the master key, with the
-	 * filenames in the case of key files.
-	 * @param array $entries The entries of the database to store.
-	 * @param boolean $writeable Whether the entries can be written or not (if
-	 * not, they will be loaded from the KeePass database file each time).
-	 * @return string|null Returns null if something went wrong, and the name
-	 * of the kphpdb file created otherwise.
-	 */
-	public static function addInternal($dbid, $internalpwd, $hashname,
-			array $keys, array $entries, $writeable)
-	{
-		$db = array(
-			self::IDX_DBTYPE => self::DBTYPE_KDBX,
-			self::IDX_HASHNAME => $hashname,
-			self::IDX_KEYS => $keys,
-			self::IDX_ENTRIES => $writeable ? $entries : null,
-			self::IDX_WRITEABLE => $writeable
-		);
-
-		$plaindb = serialize($db);
-		$key = hash('SHA256', $internalpwd, true);
-		$cipher = new CipherMcrypt(MCRYPT_RIJNDAEL_256, 'cfb', $key, null,
-			CipherMcrypt::PK7_PADDING);
-		$cipher->load();
-		$iv = $cipher->getIV();
-		if(strlen($iv) != self::IV_SIZE)
-		{
-			self::raiseError("Unexpected size of IV : " . strlen($iv));
-			$cipher->unload();
+			$error = "file '" . $file . '" does not exist.';
 			return null;
 		}
-		$bindb = $iv . $cipher->encrypt($plaindb);
-		$cipher->unload();
+		$db = Database::loadFromKdbx($reader, $mkey, $error);
+		$reader->close();
+		return $db;
+	}
 
-		return self::$dbmanager->addWithKey($dbid, $bindb, self::EXT_KPHPDB,
-			true, true);
+	/**
+	 * Embedds a string into a new kdbx file with the key $key, using $rounds
+	 * rounds of encryption. Use the method decryptFromKdbx() on the result
+	 * with the same key to get back $content from the kdbx file.
+	 * @param $content A string that will be embedded.
+	 * @param $key An iKey instance.
+	 * @param $rounds An integer.
+	 * @param &$error A string that will receive a message in case of error.
+	 * @return The content of the new kdbx file, or null in case of error.
+	 */
+	public static function encryptInKdbx($content, iKey $key, $rounds, &$error)
+	{
+		$kdbx = KdbxFile::createForEncrypting($rounds, $error);
+		if($kdbx == null)
+			return null;
+		return $kdbx->encrypt($kdbx->getHeaderHash() . $content, $key, $error);
+	}
+
+	/**
+	 * Extracts a string embedded in a kdbx file, decrypting it with the key
+	 * $key.
+	 * @param $content The content of the kdbx file, as a string.
+	 * @param $key An iKey instance.
+	 * @param $headerHash true if the header hash is prepended to the decrypted
+	 *        content (use true if the kdbx file was created with the metod
+	 *        encryptInKdbx()).
+	 * @param &$error A string that will receive a message in case of error.
+	 * @return The decrypted embedded string, or null in case of error.
+	 */
+	public static function decryptFromKdbx($content, iKey $key, $headerHash,
+		&$error)
+	{
+		$result = KdbxFile::decrypt(new StringReader($content), $key, $error);
+		if($result === null)
+			return null;
+		$content = $result->getContent();
+		if($headerHash)
+		{
+			$hash = $result->getHeaderHash();
+			$hashLen = strlen($hash);
+			if(strlen($content) < $hashLen ||
+				substr($content, 0, $hashLen) != $hash)
+			{
+				$error = "Kdbx file decrypt: header hash is not correct.";
+				return null;
+			}
+			$content = substr($content, $hashLen);
+		}
+		return $content;
 	}
 
 	/*********************
@@ -555,26 +626,52 @@ abstract class KeePassPHP
 	 *********************/
 
 	/**
-	 * Decrypts and unserialize the given binary string, assumed to be a result
-	 * of the addInternal method (i.e the content of a kphpdb file). Returns the
-	 * result (an array), or false if something went wrong (bad password, bad
-	 * binary string).
-	 * @param string $bin The binary string to decrypt and unserialize.
-	 * @param string $pwd The internal password to use as key.
-	 * @return boolean|array Returns false if something went wrong, an array
-	 * with the decrypted and unserialized data otherwise.
+	 * Opens the database $dbContent with the keys $dbPwd and $dbKeyContent.
+	 * @param $dbContent The content of a KeePass database file.
+	 * @param $dbPwd A text password for the database file.
+	 * @param $dbKeyContent A possible key file for the database file.
+	 * @return A non-null Database instance.
+	 * @throws KeePassPHPException
 	 */
-	private static function decryptUnserialize($bin, $pwd)
+	private static function openDatabase($dbContent, $dbPwd, $dbKeyContent)
 	{
-		if($bin == null || strlen($bin) < self::IV_SIZE)
-			return false;
-		$iv = substr($bin, 0, self::IV_SIZE);
-		$key = hash('SHA256', $pwd, true);
-		$cipher = new CipherMcrypt(MCRYPT_RIJNDAEL_256, 'cfb', $key, $iv,
-			CipherMcrypt::PK7_PADDING);
-		$plain = $cipher->decrypt(substr($bin, self::IV_SIZE));
-		$cipher->unload();
-		return @unserialize($plain);
+		$ckey = new CompositeKey(KdbxFile::HASH);
+		$ckey->addKey(new KeyFromPassword($dbPwd, KdbxFile::HASH));
+		if(!empty($dbKeyContent))
+		{
+			$fileKey = new KeyFromFile($dbKeyContent);
+			if(!$fileKey->isParsed)
+				throw new KeePassPHPException("key file parsing failure");
+			$ckey->addKey($fileKey);
+		}
+
+		$error = null;
+		$db = Database::loadFromKdbx(new StringReader($dbContent), $ckey,
+			$error);
+		if($db == null)
+			throw new KeePassPHPException($error);
+		return $db;
+	}
+
+	/**
+	 * Opens the KphpDB file of id $dbid with the password $kphpdbPwd.
+	 * @param $dbid A database ID.
+	 * @param $kphpdbPwd The password of the KphpDB file.
+	 * @return A non-null KpbpDB instance.
+	 * @throws KeePassPHPException
+	 */
+	private static function openKphpDB($dbid, $kphpdbPwd)
+	{
+		$kphpdbFile = self::$_kphpdbManager->getContentFromKey($dbid);
+		if($kphpdbFile == null)
+			throw new KeePassPHPException(
+				"KphpDB file not found or void (ID = " . $dbid . ").");
+		$error = null;
+		$kphpdb = KphpDB::loadFromKdbx(new StringReader($kphpdbFile),
+			new KeyFromPassword($kphpdbPwd, KdbxFile::HASH), $error);
+		if($kphpdb == null)
+			throw new KeePassPHPException($error);
+		return $kphpdb;
 	}
 }
 

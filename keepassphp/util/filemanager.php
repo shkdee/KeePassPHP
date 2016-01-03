@@ -1,17 +1,21 @@
 <?php
 
+namespace KeePassPHP;
+
 /**
- * Keeps a (possibly) persitent collection of binary strings, indexed by hashs
- * (by default, SHA-1) of these strings, or of given keys. Tries to write these
- * strings as files with filenames formatted as prefix_sha1.ext in a chosen
- * directory, unless required not to write them (in that case, it will only
- * keep the strings in memory ; but non-written-to-disk data is non-persistent).
- * Can be required to work with files only, or with no files at all, and each
- * file can be required to be non disk-writable.
+ * This class manages a collection of binary strings, indexed by hashs (by
+ * default, SHA-1) of these strings or of specific keys. This class tries to
+ * be persistent by writing these strings as files in a defined directory,
+ * unless required to not write them (either globally or on a per-file policy).
+ * In that case, it keeps them in memory but will not be persistent.
  * That class is meant to be extended to better match other, specific purposes,
  * so everything is protected and not private.
  *
- * @author Louis
+ * @package    KeePassPHP
+ * @author     Louis Traynard <louis.traynard@m4x.org>
+ * @copyright  Louis Traynard
+ * @license    http://www.opensource.org/licenses/mit-license.html  MIT License
+ * @link       https://github.com/shkdee/KeePassPHP
  */
 class FileManager
 {
@@ -34,16 +38,11 @@ class FileManager
 	 * persistent). If both are true, $memonly takes precedence. If both are
 	 * false, the data will be stored in a file if possible, and in memory
 	 * otherwise.
-	 * If files are allowed, the directory $dir will be scanned to try and
-	 * retrieve existing data ; if it does not exist, it will be created, and
-	 * if this creation fails, or if the directory cannot be read and open, and
-	 * $filesonly is true (and $memonly is false), an exception will be thrown.
 	 *
-	 * @param string $dir The directory to use to store files.
-	 * @param string $prefix The prefix for filenames.
-	 * @param boolean $filesonly Whether only files must be used.
-	 * @param boolean $memonly Whether only memory must be used.
-	 * @throws Exception
+	 * @param $dir The directory where to store files.
+	 * @param $prefix The prefix for filenames.
+	 * @param $filesonly Whether only files must be used.
+	 * @param $memonly Whether only memory must be used.
 	 */
 	public function __construct($dir, $prefix, $filesonly, $memonly = false)
 	{
@@ -52,7 +51,7 @@ class FileManager
 		$this->acceptFiles = !$memonly;
 		$this->loaded = false;
 
-		$this->dir = $dir . (substr($dir, -1) == "/" ? "" : "/");
+		$this->dir = trim($dir, '/') . '/';
 		$this->prefix = $prefix;
 	}
 
@@ -61,19 +60,18 @@ class FileManager
 	 ******************/
 
 	/**
-	 * Adds the new binary string $value to the collection, using $key to identify
-	 * it (so retrieving it will be able either with $key, or with the used hash
-	 * of $key (SHA1 by default)). Gives the extension $ext to the storing file
-	 * (if any). If $writeable is false, the string will not be stored in a file,
-	 * but only in memory. If $override is true, and if the given key already
-	 * exists in the collection, the value will be overriden.
-	 * Returns the used hash, or null in case of error.
-	 * @param string $key
-	 * @param string $value
-	 * @param string $ext
-	 * @param boolean $writeable
-	 * @param boolean $override
-	 * @return string|null
+	 * Adds $value to the collection, associating it with they key $key. Gives
+	 * the extension $ext to the storing file (if any). If $writeable is false,
+	 * the string will not be stored in a file, only kept in memory. If
+	 * $override is true, and if the $key already exists in the collection, the
+	 * value will be overriden.
+	 * @param $key A string key.
+	 * @param $value A string to store.
+	 * @param $ext The storing file extension.
+	 * @param $writeable Whether this value can be written on disk.
+	 * @param $override Whether to override an already existing file.
+	 * @return The hash of $key, or null in case of error.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function addWithKey($key, $value, $ext = self::DEFAULT_EXT,
 			$writeable = true, $override = false)
@@ -84,18 +82,17 @@ class FileManager
 	}
 
 	/**
-	 * Adds the new binary string $value to the collection, using the hash of itself
-	 * (SHA1 by default) as a key (so retrieving the value will be able only with
-	 * that hash). Gives the extension $ext to the storing file (if any). If
-	 * $writeable is false, the string will not be stored in a file, but only in
-	 * memory. If $override is true, and if the given key already exists in the
-	 * collection, the value will be overriden.
-	 * Returns the used hash, or null in case of error.
-	 * @param string $value
-	 * @param string $ext
-	 * @param boolean $writeable
-	 * @param boolean $override
-	 * @return string|null
+	 * Adds $value to the collection, using $value itself as key. Gives the
+	 * extension $ext to the storing file (if any). If $writeable is false, the
+	 * string will not be stored in a file, only kept in memory. If $override
+	 * is true, and if the $key already exists in the collection, the value
+	 * will be overriden.
+	 * @param $value A string to store using itself as key.
+	 * @param $ext The storing file extension.
+	 * @param $writeable Whether this value can be written on disk.
+	 * @param $override Whether to override an already existing file.
+	 * @return The hash of $value, or null in case of error.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function add($value, $ext = self::DEFAULT_EXT, $writeable = true,
 			$override = false)
@@ -106,10 +103,10 @@ class FileManager
 	}
 
 	/**
-	 * Returns true if the key $key already exists in the collection (which is
-	 * to say, if the hash of $key already exists).
-	 * @param string $key
-	 * @return boolean
+	 * Checks whether the key $key exists in this collection.
+	 * @param $key A string key.
+	 * @return true if $key already exists, false otherwise.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function existsKey($key)
 	{
@@ -117,9 +114,10 @@ class FileManager
 	}
 
 	/**
-	 * Returns true if the hash $h already exists in the collection.
-	 * @param string $h
-	 * @return boolean
+	 * Checks whether the hash $h exists in this collection.
+	 * @param $h A string key hash in hexadecimal.
+	 * @return true if $h already exists, false otherwise.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function exists($h)
 	{
@@ -128,41 +126,10 @@ class FileManager
 	}
 
 	/**
-	 * Returns the internal raw element indexed by the key $key (i.e by the hash
-	 * of $key), or null if $key does not exist.
-	 * @see $this->getRawElement($h)
-	 * @param string $key
-	 * @return array|null
-	 */
-	public function getRawElementFromKey($key)
-	{
-		return $this->getRawElement($this->hash($key));
-	}
-
-	/**
-	 * Returns the internal raw element indexed by the hash $h. It is an array
-	 * of 3 elements : the first contains self::TYPE_FILE if the element is
-	 * stored in a file, self::TYPE_MEM otherwise ; the second contains the given
-	 * extension of the file (even for a memory-stored element) ; the third
-	 * contains the name of the file storing the binary string, or the binary
-	 * string itself if the element is memory-stored.
-	 * Returns null if the hash $h does not exist.
-	 * @param type $h
-	 * @return array|null
-	 */
-	public function getRawElement($h)
-	{
-		$this->load();
-		if(array_key_exists($h, $this->elements))
-			return $this->elements[$h];
-		return null;
-	}
-
-	/**
-	 * Returns the binary string indexed by the hash of the key $key, or null if
-	 * $key does not exist.
-	 * @param string $key
-	 * @return string
+	 * Gets the string value indexed by the key $h.
+	 * @param $key A string key.
+	 * @return A string value, or null if $key does not exist.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function getContentFromKey($key)
 	{
@@ -170,10 +137,10 @@ class FileManager
 	}
 
 	/**
-	 * Returns the binary string indexed by the hash $h, or null if $h does not
-	 * exist.
-	 * @param string $h
-	 * @return string|null
+	 * Gets the string value indexed by the hash $h.
+	 * @param $h A string key hash in hexadecimal.
+	 * @return A string value, or null if $h does not exist.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function getContent($h)
 	{
@@ -181,19 +148,20 @@ class FileManager
 		if($e != null)
 		{
 			if($e[0] == self::TYPE_FILE)
-				return file_get_contents($this->dir . $e[2]);
+				return file_get_contents($this->dir . $e[1]);
 			elseif($e[0] == self::TYPE_MEM)
-				return $e[2];
+				return $e[1];
 		}
 		return null;
 	}
 
 	/**
-	 * Returns the filename of the file containing the binary string indexed by
-	 * the hash of the key $key, or null if $key does not exist, or if the
-	 * corresponding element is not stored with a file.
-	 * @param string $key
-	 * @return string|null
+	 * Gets the filename of the file containing the string indexed by the key
+	 * $key.
+	 * @param $key A string key.
+	 * @return A filename, or null if the value does not exist or is not stored
+	 *         in a file.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function getFileFromKey($key)
 	{
@@ -201,25 +169,54 @@ class FileManager
 	}
 
 	/**
-	 * Returns the filename of the file containing the binary string indexed by
-	 * the hash $h, or null if $h does not exist, or if the corresponding
-	 * element is not stored with a file.
-	 * @param string $h
-	 * @return string|null
+	 * Gets the filename of the file containing the string indexed by the hash
+	 * $h.
+	 * @param $h A string key hash in hexadecimal.
+	 * @return A filename, or null if the value does not exist or is not stored
+	 *         in a file.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	public function getFile($h)
 	{
 		$e = $this->getRawElement($h);
 		if($e != null && $e[0] == self::TYPE_FILE)
-			return $this->dir . $e[2];
+			return $this->dir . $e[1];
 		return null;
 	}
 
 	/**
+	 * Removes the element indexed by the key $key.
+	 * @param $key A string key.
+	 * @return true if the element existed and could be removed.
+	 * @throws Exception If this FileManager directory is not accessible.
+	 */
+	public function removeFromKey($key)
+	{
+		return $this->remove($this->hash($key));
+	}
+
+	/**
+	 * Removes the element indexed by the hash $h.
+	 * @param $h A string key hash in hexadecimal.
+	 * @return true if the element existed and could be removed.
+	 * @throws Exception If this FileManager directory is not accessible.
+	 */
+	public function remove($h)
+	{
+		$e = $this->getRawElement($h);
+		if($e == null)
+			return false;
+		if($e[0] == self::TYPE_FILE)
+			$this->removeFile($e[1]);
+		unset($this->elements[$h]);
+		return true;
+	}
+
+	/**
 	 * Prepends the directory of that FileManager to the filename $f, so that
-	 * file may be accessed and used by another application.
-	 * @param string $f
-	 * @return string
+	 * this file may be accessed and used by another application.
+	 * @param $f A filename.
+	 * @return The filename prepended by this FileManager directory.
 	 */
 	public function prependDir($f)
 	{
@@ -231,9 +228,12 @@ class FileManager
 	 *********************/
 
 	/**
-	 * Loads already-existing files in this FileManager, by scanning the
+	 * Loads already-existing files in this FileManager, by scanning its
 	 * directory for matching file names (only if this FileManager accepts
-	 * files).
+	 * files). If this directory does not exist, it will be created, and if
+	 * this creation fails or if the directory cannot be read and open, an
+	 * exception is thrown.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	protected function load()
 	{
@@ -241,15 +241,16 @@ class FileManager
 			return;
 		if($this->acceptFiles)
 		{
-			if((is_dir($this->dir) || mkdir($this->dir, 0700, true)) && $this->prefix != null &&
-					is_writable($this->dir) && $dh = opendir($this->dir))
+			if((is_dir($this->dir) || mkdir($this->dir, 0700, true)) &&
+				$this->prefix != null && is_writable($this->dir) &&
+				$dh = opendir($this->dir))
 			{
-				$pattern = "/^".$this->prefix."_([a-f0-9]+)\.(\w+)$/i";
+				$pattern = "/^".$this->prefix."_([a-f0-9]+)\.\w+$/i";
 				$matches = array();
 				while(($file = readdir($dh)) !== false)
 					if(preg_match($pattern, $file, $matches))
 						$this->elements[strtolower($matches[1])] = array(
-							self::TYPE_FILE, strtolower($matches[2]), $file);
+							self::TYPE_FILE, $file);
 			}
 			elseif(!$this->acceptMem)
 				throw new Exception("The directory " . $this->dir .
@@ -261,10 +262,43 @@ class FileManager
 	}
 
 	/**
-	 * If overriden in an extended class, performs an operation on the binary
-	 * string $value before it is saved to a file.
-	 * @param string $value
-	 * @return string
+	 * Gets the internal raw element indexed by the key $key.
+	 * @see $this->getRawElement($h)
+	 * @param $key A string key.
+	 * @return An array, or null if the key $key does not exist.
+	 * @throws Exception If this FileManager directory is not accessible.
+	 */
+	protected function getRawElementFromKey($key)
+	{
+		return $this->getRawElement($this->hash($key));
+	}
+
+	/**
+	 * Gets the internal raw element indexed by the hash $h. It is an array
+	 * of 3 items:
+	 *  * The 0th contains self::TYPE_FILE if the element is stored in a file,
+	 *    self::TYPE_MEM otherwise;
+	 *  * The 1st contains the extension of the file (even for a
+	 *    memory-stored element);
+	 *  * The 2nd contains the name of the file storing the string, or the
+	 *    string itself if the element is memory-stored.
+	 * @param $h A string key hash in hexadecimal.
+	 * @return An array, or null if the hash $h does not exist.
+	 * @throws Exception If this FileManager directory is not accessible.
+	 */
+	protected function getRawElement($h)
+	{
+		$this->load();
+		if(array_key_exists($h, $this->elements))
+			return $this->elements[$h];
+		return null;
+	}
+
+	/**
+	 * If overriden in an extended class, performs an operation on $value
+	 * before it is saved to a file.
+	 * @param $value A string value that will be stored to a file.
+	 * @return The transformed value (by default, same as $value).
 	 */
 	protected function processForFile($value)
 	{
@@ -272,10 +306,10 @@ class FileManager
 	}
 
 	/**
-	 * If overriden in an extended class, performs an operation on the binary
-	 * string $value before it is saved to memory.
-	 * @param string $value
-	 * @return string
+	 * If overriden in an extended class, performs an operation on $value
+	 * before it is saved to memory.
+	 * @param $value A string value that will be stored in memory.
+	 * @return The transformed value (by default, same as $value).
 	 */
 	protected function processForMem($value)
 	{
@@ -283,11 +317,10 @@ class FileManager
 	}
 
 	/**
-	 * Returns the name of the file which is storing the binary string indexed
-	 * by the hash $h, which has the extension $ext.
-	 * @param string $h
-	 * @param string $ext
-	 * @return string
+	 * Computes the name of the file whose key hash is $h and extension $ext.
+	 * @param $h The value key hash.
+	 * @param $ext The value extension.
+	 * @return The value filename.
 	 */
 	protected function filename($h, $ext)
 	{
@@ -295,30 +328,29 @@ class FileManager
 	}
 
 	/**
-	 * Returns the hash $k (a binary string, or a key). The default hash
-	 * alrogithm is SHA1.
-	 * @param string $k
-	 * @return string
+	 * Computes the hash of $k (by default, SHA-1) in hexadecimal.
+	 * @param $k A string.
+	 * @return A hash as an hexadecimal string.
 	 */
 	protected function hash($k)
 	{
-		return sha1($k);
+		return sha1($k, false);
 	}
 
 	/**
-	 * Adds the binary string $v, indexed by the hash $h, to the collection.
-	 * Tries to save it to a file (if possible, and if $writeable is true) with
-	 * the extension $ext, or keeps it in memory if it fails and if the
-	 * collection is not file-only. If the hash $h already exists in the
-	 * collection, the associated value will be replaced if $override is true.
-	 * Returns true if the element was added or already exists, and false
-	 * otherwise.
-	 * @param string $h
-	 * @param string $v
-	 * @param string $ext
-	 * @param boolean $writeable
-	 * @param boolean $override
-	 * @return boolean
+	 * Adds the string $v, indexed by the hash $h, to the collection. Tries to
+	 * save it to a file (if possible, and if $writeable is true) with the
+	 * extension $ext, or keeps it in memory if it fails and if the collection
+	 * is not file-only. If $h already exists in the collection, the associated
+	 * value will be replaced if $override is true.
+	 * @param $h A string key hash in hexadecimal.
+	 * @param $v A string value.
+	 * @param $ext A file extension.
+	 * @param $writeable Whether the file can be written on disk.
+	 * @param $override Whether to override an already existing file.
+	 * @return true if the element was correctly added or already exists, and
+	 *         false otherwise.
+	 * @throws Exception If this FileManager directory is not accessible.
 	 */
 	protected function addElement($h, $v, $ext, $writeable, $override)
 	{
@@ -328,18 +360,19 @@ class FileManager
 			return true;
 
 		if($writeable && $this->acceptFiles)
-			if($this->save($h, $v, $ext))
+		{
+			$filename = $this->filename($h, $ext);
+			if($this->saveFile($filename, $v))
 			{
-				$oldext = $fileexists ? $this->elements[$h][1] : $ext;
-				if($oldext != $ext)
-					$this->remove($h, $oldext);
-				$this->elements[$h] = array(self::TYPE_FILE, $ext,
-					$this->filename($h, $ext));
+				if($fileexists && $this->elements[$h][1] != $filename)
+					$this->removeFile($this->elements[$h][1]);
+				$this->elements[$h] = array(self::TYPE_FILE, $filename);
 				return true;
 			}
+		}
 		if($this->acceptMem)
 		{
-			$this->elements[$h] = array(self::TYPE_MEM, $ext,
+			$this->elements[$h] = array(self::TYPE_MEM,
 				$this->processForMem($v));
 			return true;
 		}
@@ -347,17 +380,14 @@ class FileManager
 	}
 
 	/**
-	 * Performs the actual saving of the binary string $content to the file
-	 * defined by the hash $h and the extension $ext. Returns true in case of
-	 * success, or false otherwise.
-	 * @param string $h
-	 * @param string $content
-	 * @param string $ext
-	 * @return boolean
+	 * Performs the actual writing of the string $content to the file $f.
+	 * @param $filename An element filename.
+	 * @param $content A string to write.
+	 * @return true in case of success, or false otherwise.
 	 */
-	protected function save($h, $content, $ext)
+	protected function saveFile($filename, $content)
 	{
-		$f = fopen($this->dir . $this->filename($h, $ext), "wb");
+		$f = fopen($this->dir . $filename, "wb");
 		if($f)
 		{
 			if(fwrite($f, $this->processForFile($content)))
@@ -371,15 +401,13 @@ class FileManager
 	}
 
 	/**
-	 * Deletes (if possible) the file defined by the hash $h and the extension
-	 * $ext.
-	 * @param string $h
-	 * @param string $ext
-	 * @return boolean
+	 * Deletes (if possible) the file $f of an element.
+	 * @param $filename An element filename.
+	 * @return true in case of success, false otherwise.
 	 */
-	protected function remove($h, $ext)
+	protected function removeFile($filename)
 	{
-		return @unlink($this->dir . $this->filename($h, $ext));
+		return @unlink($this->dir . $filename);
 	}
 }
 

@@ -1,38 +1,31 @@
 <?php
 
-/**
- * An abstract cipher enfine.
- */
-interface iCipherEngine
-{
-	public function load();
-	public function unload();
-	public function encrypt($s);
-	public function decrypt($s);
-}
+namespace KeePassPHP;
 
 /**
- * A CipherEngine based on one of the ciphers implemented by the PHP mcrypt
- * module. The wrapping makes it possible to control the given arguments, to
- * ease the pain of calling mcrypt_generic (since it automatically deals with
- * all mcrypt_generic_init and mcrypt_generic_deinit stuff) ; finally, it adds
- * a support of the PK7 padding method, used in C# and Java but not known by
- * PHP.
+ * A wrapper around the PHP mcrypt module. It makes it easier to control
+ * arguments and automatically manages calls to mcrypt_module_open/init/deinit,
+ * etc. Finally, it adds a support of the PK7 padding method.
+ *
+ * @package    KeePassPHP
+ * @author     Louis Traynard <louis.traynard@m4x.org>
+ * @copyright  Louis Traynard
+ * @license    http://www.opensource.org/licenses/mit-license.html  MIT License
+ * @link       https://github.com/shkdee/KeePassPHP
  */
-class CipherMcrypt implements iCipherEngine
+class CipherMcrypt
 {
-	private $type;
-	private $module;
-	private $mode;
-	private $key;
-	private $iv;
-	private $padding;
+	private $_type;
+	private $_module;
+	private $_mode;
+	private $_key;
+	private $_iv;
+	private $_padding;
 
 	// 0 = unloaded, 1 = loaded,
 	// 2 = encrypting, 3 = decrypting
-	private $state = 0;
+	private $_state = 0;
 
-	const AES128 = MCRYPT_RIJNDAEL_128;
 	const PK7_PADDING = "pk7";
 
 	/**
@@ -40,23 +33,22 @@ class CipherMcrypt implements iCipherEngine
 	 * mode $mode, the key $key, the initialization vector $iv and the padding
 	 * mode $padding. If $mode and $key are both null and are not set in some
 	 * way before calling the method load, it will fail miserably.
-	 * @param string $cipherType The mcrypt module to use.
-	 * @param string|null $mode The mcrypt encryption mode to use.
-	 * @param string|null $key The key, used for decryption as well as
-	 * encryption.
-	 * @param string $iv|null The initialization vector.
-	 * @param string $padding|null The type of padding to use.
+	 * @param $cipherType The mcrypt module to use.
+	 * @param $mode The mcrypt encryption mode to use.
+	 * @param $key The key, used for decryption as well as encryption.
+	 * @param $iv The initialization vector.
+	 * @param $padding The type of padding to use.
 	 */
 	public function __construct($cipherType, $mode = null,
 			$key = null, $iv = null, $padding = null)
 	{
-		$this->type = $cipherType;
-		$this->mode = $mode;
-		$this->key = $key;
-		$this->iv = $iv;
-		$this->padding = $padding;
-		$this->module = null;
-		$this->state = 0;
+		$this->_type = $cipherType;
+		$this->_mode = $mode;
+		$this->_key = $key;
+		$this->_iv = $iv;
+		$this->_padding = $padding;
+		$this->_module = null;
+		$this->_state = 0;
 	}
 
 	/******************
@@ -64,49 +56,49 @@ class CipherMcrypt implements iCipherEngine
 	 ******************/
 
 	/**
-	 * Set the mcrypt mode to use.
-	 * @param string $m The mcrypt mode to use.
+	 * Sets the mcrypt mode to use.
+	 * @param $m A mcrypt mode.
 	 */
 	public function setMode($m)
 	{
-		$this->mode = $m;
+		$this->_mode = $m;
 	}
 
 	/**
-	 * Set the decryption key to use.
-	 * @param string $k The key to use.
+	 * Sets the decryption key to use.
+	 * @param $k A binary string used as key (must be of correct length).
 	 */
 	public function setKey($k)
 	{
-		$this->key = $k;
+		$this->_key = $k;
 	}
 
 	/**
-	 * Set the initialization vector to use.
-	 * @param string $iv The initialization vector to use.
+	 * Sets the initialization vector to use.
+	 * @param $iv A binary string used as IV (must be of correct length).
 	 */
 	public function setIV($iv)
 	{
-		$this->iv = $iv;
+		$this->_iv = $iv;
 	}
 
 	/**
-	 * Set the padding mode to use.
-	 * @param string $p The padding mode to use.
+	 * Sets the padding mode to use.
+	 * @param $p A padding method.
 	 */
 	public function setPadding($p)
 	{
-		$this->padding = $p;
+		$this->_padding = $p;
 	}
 
 	/**
-	 * Returns the current initilization vector.
-	 * @return string|null The current initialization vector (may be null if
-	 * it has not been set yet).
+	 * Gets the current initilization vector.
+	 * @return The current initialization vector (may be null if it has not
+	 * been set yet).
 	 */
 	public function getIV()
 	{
-		return $this->iv;
+		return $this->_iv;
 	}
 
 	/****************************
@@ -114,26 +106,27 @@ class CipherMcrypt implements iCipherEngine
 	 ****************************/
 
 	/**
-	 * Loads the cipher in mcrypt (must be done before starting to decrypt !).
+	 * Loads the cipher in mcrypt (must be done before starting to decrypt!).
 	 * If it was already opened, tries to close it and re-open it (!) because
 	 * that should happen only between an encrypt and a decrypt operation (in
-	 * which case it is needed, but this class takes care of that).
-	 * @return boolean Returns true if loading was successful, false otherwise.
+	 * which case it is indeed needed).
+	 * @return true if loading was successful, false otherwise.
 	 */
 	public function load()
 	{
-		if($this->state != 0)
+		if($this->_state != 0)
 			return true;
-		if($this->module !== null)
+		if($this->_module !== null)
 			$this->unload();
-		if($this->mode == null || $this->key === null)
+		if($this->_mode == null || $this->_key === null)
 			return false; // we could almot raise an error...
-		$this->module = mcrypt_module_open($this->type, '', $this->mode, '');
-		if($this->iv === null)
-			$this->iv = mcrypt_create_iv(
-					mcrypt_get_iv_size($this->type, $this->mode), MCRYPT_RAND);
-		mcrypt_generic_init($this->module, $this->key, $this->iv);
-		$this->state = 1;
+		$this->_module = mcrypt_module_open($this->_type, '',
+			$this->_mode, '');
+		if($this->_iv === null)
+			$this->_iv = mcrypt_create_iv(mcrypt_get_iv_size($this->_type,
+				$this->_mode), MCRYPT_RAND);
+		mcrypt_generic_init($this->_module, $this->_key, $this->_iv);
+		$this->_state = 1;
 		return true;
 	}
 
@@ -142,54 +135,54 @@ class CipherMcrypt implements iCipherEngine
 	 */
 	public function unload()
 	{
-		mcrypt_generic_deinit($this->module);
-		mcrypt_module_close($this->module);
-		$this->module = null;
-		$this->state = 0;
+		mcrypt_generic_deinit($this->_module);
+		mcrypt_module_close($this->_module);
+		$this->_module = null;
+		$this->_state = 0;
 	}
 
 	/**
-	 * Encrypts the given binary string $s.
-	 * @param string $s The binary string to be encrypted.
-	 * @return string|null Returns the encrypted string, or null in case of
-	 * error.
+	 * Encrypts the given string $s.
+	 * @param $s A string to encrypt.
+	 * @return The encrypted string, or null in case of error.
 	 */
 	public function encrypt($s)
 	{
-		if($this->state == 0)
+		if($this->_state == 0)
 			if(!$this->load())
 				return null;
-		if($this->state == 3)
+		if($this->_state == 3)
 		{
-			mcrypt_generic_deinit($this->module);
-			mcrypt_generic_init($this->module, $this->key, $this->iv);
+			mcrypt_generic_deinit($this->_module);
+			mcrypt_generic_init($this->_module, $this->_key, $this->_iv);
 		}
-		$this->state = 2;
-		$padded = $this->padding == self::PK7_PADDING ?
-				self::addPK7Padding($s) : $s;
-		return mcrypt_generic($this->module, $padded);
+		$this->_state = 2;
+		$padded = $this->_padding == self::PK7_PADDING ?
+				self::addPK7Padding($s,
+					mcrypt_get_block_size($this->_type, $this->_mode)) : $s;
+		return mcrypt_generic($this->_module, $padded);
 	}
 
 	/**
-	 * Decrypts the binary string $s, and returns the result.
-	 * @param string $s The binary string to be decrypted.
-	 * @return string|null Returns the decrypted string, or null in case of
-	 * error.
+	 * Decrypts the string $s.
+	 * @param $s An encrypted string.
+	 * @return The decrypted string, or null in case of error.
 	 */
 	public function decrypt($s)
 	{
-		if($this->state == 0)
+		if($this->_state == 0)
 			if(!$this->load())
 				return null;
-		if($this->state == 2)
+		if($this->_state == 2)
 		{
-			mcrypt_generic_deinit($this->module);
-			mcrypt_generic_init($this->module, $this->key, $this->iv);
+			mcrypt_generic_deinit($this->_module);
+			mcrypt_generic_init($this->_module, $this->_key, $this->_iv);
 		}
-		$this->state = 3;
-		$padded = mdecrypt_generic($this->module, $s);
-		if($this->padding == self::PK7_PADDING)
-			return self::removePK7Padding ($padded);
+		$this->_state = 3;
+		$padded = mdecrypt_generic($this->_module, $s);
+		if($this->_padding == self::PK7_PADDING)
+			return self::removePK7Padding($padded,
+				mcrypt_get_block_size($this->_type, $this->_mode));
 		return $padded;
 	}
 
@@ -198,13 +191,13 @@ class CipherMcrypt implements iCipherEngine
 	 *******************/
 
 	/**
-	 * Pads the given binary string $str with the PK7 padding scheme, so that
-	 * its length be a multiple of $blocksize. Returns the padded string.
-	 * @param string $str The binary string to be padded.
-	 * @param int $blocksize The block size to pad the string $str with.
-	 * @return string Returns the resulting padded string.
+	 * Pads the given string $str with the PK7 padding scheme, so that its
+	 * length shall be a multiple of $blocksize.
+	 * @param $str A string to pad.
+	 * @param $blocksize The block size.
+	 * @return The resulting padded string.
 	 */
-	private static function addPK7Padding($str, $blocksize = 16)
+	private static function addPK7Padding($str, $blocksize)
 	{
 		$len = strlen($str);
 		$pad = $blocksize - ($len % $blocksize);
@@ -212,19 +205,19 @@ class CipherMcrypt implements iCipherEngine
 	}
 
 	/**
-	 * Tries to unpad the PK7-padded binary string $string, and returns
-	 * the result in case of success, or null otherwise.
-	 * @param string $string The binary string to be unpadded.
-	 * @return null|string Returns the unpadded string, or null in case of error.
+	 * Tries to unpad the PK7-padded string $string.
+	 * @param $string The string to unpad.
+	 * @return The unpadded string, or null in case of error.
 	 */
-	private static function removePK7Padding($string)
+	private static function removePK7Padding($string, $blocksize)
 	{
-		$lastlen = ord(substr($string, -1));
-		$lastcar = chr($lastlen);
-		$pcheck = substr($string, -$lastlen);
-		if(strspn($pcheck, $lastcar) != $lastlen)
+		$len = strlen($string);
+		$padlen = ord($string[$len - 1]);
+		$padding = substr($string, -$padlen);
+		if($padlen > $blocksize || $padlen == 0 ||
+			substr_count($padding, chr($padlen)) != $padlen)
 			return null;
-		return substr($string, 0, strlen($string)-$lastlen);
+		return substr($string, 0, $len - $padlen);
 	}
 }
 

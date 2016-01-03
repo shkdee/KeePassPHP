@@ -1,13 +1,10 @@
 <?php
 
+namespace KeePassPHP;
+
 /**
  * Implementation of gzdecode which just works.
  * See http://www.php.net/manual/en/function.gzdecode.php#82930
- * @param string $data
- * @param string $filename
- * @param string $error
- * @param int $maxlength
- * @return null|boolean
  */
 function gzdecode2($data, &$filename = '', &$error = '', $maxlength = null) {
 	$len = strlen($data);
