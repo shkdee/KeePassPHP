@@ -1,7 +1,5 @@
 <?php
 
-namespace KeePassPHP;
-
 function usageAndDie()
 {
 	echo "Usage: php keepassphp-cli.php <command> [args...]",
@@ -29,7 +27,7 @@ function errorAndDie($msg)
 	die();
 }
 
-function visitDatabase(Database $db)
+function visitDatabase(\KeePassPHP\Database $db)
 {
 	echo "Database '", $db->getName(), "'\n";
 	$groups = $db->getGroups();
@@ -42,7 +40,7 @@ function visitDatabase(Database $db)
 	}
 }
 
-function visitGroup(Group $group, $indent)
+function visitGroup(\KeePassPHP\Group $group, $indent)
 {
 	echo str_pad("", $indent, " "), "Group '", $group->name, "'\n";
 	if($group->groups != null)
@@ -59,7 +57,7 @@ function visitGroup(Group $group, $indent)
 	}
 }
 
-function visitEntry(Entry $entry, $indent)
+function visitEntry(\KeePassPHP\Entry $entry, $indent)
 {
 	echo str_pad("", $indent, " "),
 		$entry->uuid, "\t => ", $entry->title,
@@ -73,6 +71,7 @@ if($count < 2)
 
 // load classes
 require_once "keepassphp/keepassphp.php";
+use \KeePassPHP\KeePassPHP as KeePassPHP;
 
 // configuration
 $debugMode = true;
