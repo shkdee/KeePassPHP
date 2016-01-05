@@ -82,7 +82,8 @@ class Database
 	 */
 	public function getCustomIcon($uuid)
 	{
-		return $this->_customIcons == null ? null : $this->_customIcons[$uuid];
+		return $this->_customIcons == null ? null 
+			: "data:image/png;base64," . $this->_customIcons[$uuid];
 	}
 
 	/**
