@@ -387,12 +387,14 @@ class FileManager
 	 */
 	protected function saveFile($filename, $content)
 	{
-		$f = fopen($this->dir . $filename, "wb");
+		$filename = $this->dir . $filename; 
+		$f = fopen($filename, "wb");
 		if($f)
 		{
 			if(fwrite($f, $this->processForFile($content)))
 			{
 				fclose($f);
+				chmod($filename, 0600);
 				return true;
 			}
 			fclose($f);
