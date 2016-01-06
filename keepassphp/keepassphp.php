@@ -135,7 +135,7 @@ abstract class KeePassPHP
 		if($dataDir === null)
 			$dataDir = dirname(__FILE__) . '/' . self::DEFAULT_DATA_DIR;
 		else
-			$dataDir = trim($dataDir, '/') . '/';
+			$dataDir = rtrim($dataDir, '/') . '/';
 
 		self::$_kphpdbManager = new FileManager(
 			$dataDir . self::DIR_KPHPDB, self::PREFIX_KPHPDB, true, false);

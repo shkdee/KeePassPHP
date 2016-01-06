@@ -51,7 +51,7 @@ class FileManager
 		$this->acceptFiles = !$memonly;
 		$this->loaded = false;
 
-		$this->dir = trim($dir, '/') . '/';
+		$this->dir = rtrim($dir, '/') . '/';
 		$this->prefix = $prefix;
 	}
 
