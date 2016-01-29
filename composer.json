@@ -1,0 +1,21 @@
+{
+    "name": "keepassphp/keepassphp",
+    "type": "library",
+    "description": "KeePass password manager in PHP",
+    "keywords": ["keepass","password manager"],
+    "homepage": "https://github.com/shkdee/KeePassPHP",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Louis Traynard",
+            "email": "louis.traynard@m4x.org",
+            "homepage": "https://github.com/shkdee"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0"
+    },
+    "autoload": {
+        "files": ["keepassphp/keepassphp.php"]
+    }
+}
