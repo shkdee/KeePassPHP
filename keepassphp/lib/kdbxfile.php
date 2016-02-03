@@ -147,9 +147,9 @@ class KdbxFile
 			return null;
 		}
 
-		$cipherType = $header->cipher === KdbxHeader::CIPHER_AES
-			? MCRYPT_RIJNDAEL_128 : null;
-		if($cipherType == null)
+		$cipherMethod = $header->cipher === KdbxHeader::CIPHER_AES
+			? 'aes-256-cbc' : null;
+		if($cipherMethod === null)
 		{
 			$error = "Kdbx file encrypt: unkown cipher.";
 			return null;	
@@ -157,10 +157,14 @@ class KdbxFile
 
 		$hashedContent = HashedBlockReader::hashString($content, self::HASH);
 		$transformedKey = self::transformKey($key, $header);
-		$cipher = new CipherMcrypt($cipherType, 'cbc', $transformedKey,
-			$header->encryptionIV, CipherMcrypt::PK7_PADDING);
+		$cipher = Cipher::Create($cipherMethod, $transformedKey,
+			$header->encryptionIV);
+		if($cipher == null)
+		{
+			$error = "Kdbx file encrypt: cannot create cipher.";
+			return null;
+		}
 		$encrypted = $cipher->encrypt($header->startBytes . $hashedContent);
-		$cipher->unload();
 		if(empty($encrypted))
 		{
 			$error = "Kdbx file encrypt: encryption failed.";
@@ -238,19 +242,23 @@ class KdbxFile
 			}
 		}
 
-		$cipherType = $header->cipher === KdbxHeader::CIPHER_AES
-			? MCRYPT_RIJNDAEL_128 : null;
-		if($cipherType == null)
+		$cipherMethod = $header->cipher === KdbxHeader::CIPHER_AES
+			? 'aes-256-cbc' : null;
+		if($cipherMethod === null)
 		{
 			$error = "Kdbx file decrypt: unkown cipher.";
 			return null;	
 		}
 
 		$transformedKey = self::transformKey($key, $header);
-		$cipher = new CipherMcrypt($cipherType, 'cbc', $transformedKey,
-			$header->encryptionIV, CipherMcrypt::PK7_PADDING);
+		$cipher = Cipher::Create($cipherMethod, $transformedKey,
+			$header->encryptionIV);
+		if($cipher == null)
+		{
+			$error = "Kdbx file decrypt: cannot create cipher.";
+			return null;
+		}
 		$decrypted = $cipher->decrypt($reader->readToTheEnd());
-		$cipher->unload();
 		if(empty($decrypted) || substr($decrypted, 0, self::STARTBYTES_LEN)
 			!== $header->startBytes)
 		{
@@ -296,43 +304,55 @@ class KdbxFile
 	private static function transformKey(iKey $key, KdbxHeader $header)
 	{
 		$keyHash = $key->getHash();
-		$aesCipher = new CipherMcrypt(MCRYPT_RIJNDAEL_128, 'ecb',
-			$header->transformSeed);
-		// We have to do $rounds encryptions, where $rounds
-		// is a 64 bit unsigned integer. Since PHP does not
-		// handle 64 bit integers in a clear way, nor 32 bit
-		// unsigned integers, it is safer to take $rounds as
-		// an array of 4 short (16 bit) unsigned integers.
+		$cipher = Cipher::Create('aes-256-ecb', $header->transformSeed,
+			"", Cipher::PADDING_NONE);
+		// We have to do $rounds encryptions, where $rounds is a 64 bit
+		// unsigned integer. Since PHP does not handle 64 bit integers in a
+		// clear way, nor 32 bit unsigned integers, it is safer to take
+		// $rounds as an array of 4 short (16 bit) unsigned integers.
+		// Remember that $rounds is encoded in little-endian.
 		$rounds = array_values(unpack("v4", $header->rounds));
+		// To go even faster, represent $rounds in base 2**30 by only three
+		// signed integers, that PHP should handle correctly. $o, $t and $h
+		// will respectively be ones, tens and hundrers. $o and $t each take 30
+		// bits, $h takes the remaining 4.
+		$o = $rounds[0] | (($rounds[1] & 0x3fff) << 16);
+		$t = (($rounds[1] & 0xc000) >> 14) | ($rounds[2] << 2) |
+			(($rounds[3] & 0x0fff) << 18);
+		$h = ($rounds[3] & 0xf000) >> 12;
+		// So virtually, the number of rounds is $o + ($t << 30) + ($h << 60).
 		$loop = false;
 		do
 		{
-			// Let's do a direct, very fast loop on the first coordinate
-			// of $rounds (remove $rounds[0] from the integer represented by
-			// $rounds).
-			$l = $rounds[0];
-			for($i = 0; $i < $l; $i++)
-				$keyHash = $aesCipher->encrypt($keyHash);
-			$rounds[0] = 0;
-			// whether $rounds represents 0
+			// Let's do a direct, very fast loop on the ones $o
+			if($o > 0)
+				$keyHash = $cipher->encryptManyTimes($keyHash, $o);
+			// whether there is still some rounds to perform
 			$loop = false;
-			// Then, maybe remove 1 from the integer represented by $rounds,
-			// knowing that $rounds[0] = 0.
-			for($i = 1; $i < 4; $i++)
+			// then, remove 1 from the number of rounds (that's just a
+			// substraction in base 2**30 of a 3-digit number), knowing that
+			// $o equals 0.
+			if($t > 0)
 			{
-				if($rounds[$i] > 0)
-				{
-					$rounds[$i]--;
-					$keyHash = $aesCipher->encrypt($keyHash);
-					for($j = $i - 1; $j >= 0; $j--)
-						$rounds[$j] = 0xffff;
-					$loop = true;
-					break;
-				}
+				$t--;
+				// We set $o to (2**30 - 1) + 1 = 2**30 because we still
+				// have to do the encryption round that we're currently
+				// substracting. So we don't really do a substraction, we
+				// just write the number differently. That's also why we
+				// chose to represent $rounds in base 2**30 rather than 2**31.
+				$o = 0x40000000;
+				$loop = true;
+			}
+			else if($h > 0)
+			{
+				$h--;
+				$t = 0x3fffffff;
+				// same as above
+				$o = 0x40000000;
+				$loop = true;
 			}
 		} while($loop);
 
-		$aesCipher->unload();
 		$finalKey = hash(self::HASH, $keyHash, true);
 		return hash(self::HASH, $header->masterSeed . $finalKey, true);
 	}

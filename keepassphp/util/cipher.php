@@ -3,9 +3,8 @@
 namespace KeePassPHP;
 
 /**
- * A wrapper around the PHP mcrypt module. It makes it easier to control
- * arguments and automatically manages calls to mcrypt_module_open/init/deinit,
- * etc. Finally, it adds a support of the PK7 padding method.
+ * An abstract cipher class that can be backed by various cryptographic
+ * libraries - currently OpenSSL (if possible) and Mcrypt (otherwise).
  *
  * @package    KeePassPHP
  * @author     Louis Traynard <louis.traynard@m4x.org>
@@ -13,60 +12,48 @@ namespace KeePassPHP;
  * @license    http://www.opensource.org/licenses/mit-license.html  MIT License
  * @link       https://github.com/shkdee/KeePassPHP
  */
-class CipherMcrypt
+abstract class Cipher
 {
-	private $_type;
-	private $_module;
-	private $_mode;
-	private $_key;
-	private $_iv;
-	private $_padding;
+	protected $_method;
+	protected $_key;
+	protected $_iv;
+	protected $_padding;
 
-	// 0 = unloaded, 1 = loaded,
-	// 2 = encrypting, 3 = decrypting
-	private $_state = 0;
+	/** Add no padding (the data must be of correct length). */
+	const PADDING_NONE = 0;
 
-	const PK7_PADDING = "pk7";
+	/** Add PKCS7 padding. */
+	const PADDING_PKCS7 = 1;
 
 	/**
-	 * Constructs a CipherMcrypt from the mcrypt cipher $cipherType, the mcrypt
-	 * mode $mode, the key $key, the initialization vector $iv and the padding
-	 * mode $padding. If $mode and $key are both null and are not set in some
-	 * way before calling the method load, it will fail miserably.
-	 * @param $cipherType The mcrypt module to use.
-	 * @param $mode The mcrypt encryption mode to use.
-	 * @param $key The key, used for decryption as well as encryption.
-	 * @param $iv The initialization vector.
-	 * @param $padding The type of padding to use.
+	 * Constructs a new Cipher instance.
+	 * @param $method One of the OpenSSL ciphers constants.
+	 * @param $key A binary string used as key (must be of correct length).
+	 * @param $iv A binary string used as initialization vector (must be of
+	 *        correct length), or "" if none are needed.
+	 * @param $padding The type of padding to use. Must be one of the constants
+	 *        self::PADDING_*.
 	 */
-	public function __construct($cipherType, $mode = null,
-			$key = null, $iv = null, $padding = null)
+	protected function __construct($method, $key, $iv, $padding)
 	{
-		$this->_type = $cipherType;
-		$this->_mode = $mode;
-		$this->_key = $key;
-		$this->_iv = $iv;
-		$this->_padding = $padding;
-		$this->_module = null;
-		$this->_state = 0;
-	}
-
-	/******************
-	 * Public methods *
-	 ******************/
-
-	/**
-	 * Sets the mcrypt mode to use.
-	 * @param $m A mcrypt mode.
-	 */
-	public function setMode($m)
-	{
-		$this->_mode = $m;
+		$this->setKey($key);
+		$this->setIV($iv);
+		$this->setPadding($padding);
+		$this->setMethod($method);
 	}
 
 	/**
-	 * Sets the decryption key to use.
-	 * @param $k A binary string used as key (must be of correct length).
+	 * Sets the cipher method to use.
+	 * @param $method One of the OpenSSL ciphers constants.
+	 */
+	public function setMethod($method)
+	{
+		$this->_method = $method;
+	}
+
+	/**
+	 * Sets the encryption or decryption key to use.
+	 * @param $key A binary string (must be of correct length).
 	 */
 	public function setKey($k)
 	{
@@ -75,7 +62,8 @@ class CipherMcrypt
 
 	/**
 	 * Sets the initialization vector to use.
-	 * @param $iv A binary string used as IV (must be of correct length).
+	 * @param $iv A binary string (must be of correct length), or "" if none
+	 *        are needed.
 	 */
 	public function setIV($iv)
 	{
@@ -84,106 +72,233 @@ class CipherMcrypt
 
 	/**
 	 * Sets the padding mode to use.
-	 * @param $p A padding method.
+	 * @param $padding A padding type. Must be one of the constants
+	 *        self::PADDING_*.
 	 */
-	public function setPadding($p)
+	public function setPadding($padding)
 	{
-		$this->_padding = $p;
+		$this->_padding = $padding;
 	}
 
 	/**
-	 * Gets the current initilization vector.
-	 * @return The current initialization vector (may be null if it has not
-	 * been set yet).
+	 * Encrypts $s with this cipher instance method and key.
+	 * @param $s A raw string to encrypt.
+	 * @return The result as a raw string, or null in case of error.
 	 */
-	public function getIV()
-	{
-		return $this->_iv;
-	}
-
-	/****************************
-	 * Interface implementation *
-	 ****************************/
+	abstract public function encrypt($s);
 
 	/**
-	 * Loads the cipher in mcrypt (must be done before starting to decrypt!).
-	 * If it was already opened, tries to close it and re-open it (!) because
-	 * that should happen only between an encrypt and a decrypt operation (in
-	 * which case it is indeed needed).
-	 * @return true if loading was successful, false otherwise.
+	 * Performs $r rounds of encryption on $s with this cipher instance.
+	 * @param $s A raw string, that must have a correct length to be encrypted
+	 *        with no padding.
+	 * @param $r The number of encryption rounds to perform.
+	 * @return The result as a raw string, or null in case of error.
 	 */
-	public function load()
+	abstract public function encryptManyTimes($s, $r);
+
+	/**
+	 * Decrypts $s with this cipher instance method and key.
+	 * @param $s A raw string to decrypt.
+	 * @return The result as a raw string, or null in case of error.
+	 */
+	abstract public function decrypt($s);
+
+	/**
+	 * Creates a new Cipher instance of one of the implementing classes,
+	 * depending on the available extensions. Currently, CipherOpenSSL will be
+	 * chosen in priority if possible, otherwise CipherMcrypt will be used.
+	 * If $method and $key are null and are not set in some way before
+	 * encrypting or decrypting, the operation will fail miserably.
+	 * @param $method The OpenSSL method to use.
+	 * @param $key The key, used for decryption as well as encryption.
+	 * @param $iv The initialization vector, or "" if none are needed.
+	 * @param $padding The type of padding to use. Must be one of the constants
+	 *        self::PADDING_*.
+	 */
+	public static function Create($method, $key = null, $iv = "",
+		$padding = self::PADDING_PKCS7)
 	{
-		if($this->_state != 0)
-			return true;
-		if($this->_module !== null)
-			$this->unload();
-		if($this->_mode == null || $this->_key === null)
-			return false; // we could almot raise an error...
-		$this->_module = mcrypt_module_open($this->_type, '',
-			$this->_mode, '');
-		if($this->_iv === null)
-			$this->_iv = mcrypt_create_iv(mcrypt_get_iv_size($this->_type,
-				$this->_mode), MCRYPT_RAND);
-		mcrypt_generic_init($this->_module, $this->_key, $this->_iv);
-		$this->_state = 1;
-		return true;
+		return (PHP_VERSION_ID >= 50400 && extension_loaded("openssl"))
+			? new CipherOpenSSL($method, $key, $iv, $padding)
+			: new CipherMcrypt($method, $key, $iv, $padding);
+	}
+}
+
+/**
+ * A Cipher implementation based on the OpenSSL PHP extension. This class
+ * should be preferred over CipherMcrypt if the OpenSSL extension if available,
+ * as OpenSSL is faster and more reliable than libmcrypt.
+ */
+class CipherOpenSSL extends Cipher
+{
+	/**
+	 * Constructs a new CipherOpenSSL instance. Calling code should check
+	 * before creating this instance that the OpenSSL extension is loaded.
+	 * @param $method The OpenSSL method to use.
+	 * @param $key The key, used for decryption as well as encryption.
+	 * @param $iv The initialization vector, or "" if none are needed.
+	 * @param $padding The type of padding to use. Must be one of the constants
+	 *        parent::PADDING_*.
+	 */
+	public function __construct($method, $key = null, $iv = "",
+		$padding = self::PADDING_PKCS7)
+	{
+		parent::__construct($method, $key, $iv, $padding);
 	}
 
 	/**
-	 * Closes the mcrypt cipher.
-	 */
-	public function unload()
-	{
-		mcrypt_generic_deinit($this->_module);
-		mcrypt_module_close($this->_module);
-		$this->_module = null;
-		$this->_state = 0;
-	}
-
-	/**
-	 * Encrypts the given string $s.
-	 * @param $s A string to encrypt.
-	 * @return The encrypted string, or null in case of error.
+	 * Encrypts $s with this cipher instance method and key.
+	 * @param $s A raw string to encrypt.
+	 * @return The result as a raw string, or null in case of error.
 	 */
 	public function encrypt($s)
 	{
-		if($this->_state == 0)
-			if(!$this->load())
-				return null;
-		if($this->_state == 3)
-		{
-			mcrypt_generic_deinit($this->_module);
-			mcrypt_generic_init($this->_module, $this->_key, $this->_iv);
-		}
-		$this->_state = 2;
-		$padded = $this->_padding == self::PK7_PADDING ?
-				self::addPK7Padding($s,
-					mcrypt_get_block_size($this->_type, $this->_mode)) : $s;
-		return mcrypt_generic($this->_module, $padded);
+		if(strlen($this->_method) == 0 || strlen($this->_key) == 0)
+			return null;
+		$options = OPENSSL_RAW_DATA;
+		if($this->_padding == parent::PADDING_NONE)
+			$options = $options | OPENSSL_NO_PADDING;
+		return openssl_encrypt($s, $this->_method, $this->_key, $options,
+				$this->_iv);
 	}
 
 	/**
-	 * Decrypts the string $s.
-	 * @param $s An encrypted string.
-	 * @return The decrypted string, or null in case of error.
+	 * Performs $r rounds of encryption on $s with this cipher instance.
+	 * @param $s A raw string, that must have a correct length to be encrypted
+	 *        with no padding.
+	 * @param $r The number of encryption rounds to perform.
+	 * @return The result as a raw string, or null in case of error.
+	 */
+	public function encryptManyTimes($s, $r)
+	{
+		if(strlen($this->_method) == 0 || strlen($this->_key) == 0)
+			return null;
+		$options = OPENSSL_RAW_DATA | OPENSSL_NO_PADDING;
+		for($i = 0; $i < $r; $i++)
+			$s = openssl_encrypt($s, $this->_method, $this->_key, $options,
+				$this->_iv);
+		return $s;
+	}
+
+	/**
+	 * Decrypts $s with this cipher instance method and key.
+	 * @param $s A raw string to decrypt.
+	 * @return The result as a raw string, or null in case of error.
 	 */
 	public function decrypt($s)
 	{
-		if($this->_state == 0)
-			if(!$this->load())
-				return null;
-		if($this->_state == 2)
+		if(strlen($this->_method) == 0 || strlen($this->_key) == 0)
+			return null;
+		$options = OPENSSL_RAW_DATA;
+		if($this->_padding == parent::PADDING_NONE)
+			$options = $options | OPENSSL_NO_PADDING;
+		return openssl_decrypt($s, $this->_method, $this->_key, $options,
+			$this->_iv);
+	}
+}
+
+/**
+ * A Cipher implementation based on the mcrypt PHP extension.
+ */
+class CipherMcrypt extends Cipher
+{
+	private $_type;
+	private $_mode;
+
+	// 0 = unloaded, 1 = loaded,
+	// 2 = encrypting, 3 = decrypting
+	// private $_state = 0;
+
+	/**
+	 * Constructs a new CipherMcrypt instance.
+	 * @param $method The OpenSSL method to use (will be translated to mcrypt
+	 *        corresponding cipher type and mode).
+	 * @param $key The key, used for decryption as well as encryption.
+	 * @param $iv The initialization vector, or "" if none are needed.
+	 * @param $padding The type of padding to use. Must be one of the constants
+	 *        parent::PADDING_*.
+	 */
+	public function __construct($method, $key = null, $iv = "",
+		$padding = self::PADDING_PKCS7)
+	{
+		$this->_type = null;
+		$this->_mode = null;
+		parent::__construct($method, $key, $iv, $padding);
+	}
+
+	/**
+	 * Sets the cipher method to use.
+	 * @param $method One of the OpenSSL ciphers constants.
+	 */
+	public function setMethod($method)
+	{
+		parent::setMethod($method);
+		$method = strtolower($method);
+		if($method == "aes-256-ecb")
 		{
-			mcrypt_generic_deinit($this->_module);
-			mcrypt_generic_init($this->_module, $this->_key, $this->_iv);
+			$this->_type = MCRYPT_RIJNDAEL_128;
+			$this->_mode = "ecb";
 		}
-		$this->_state = 3;
-		$padded = mdecrypt_generic($this->_module, $s);
-		if($this->_padding == self::PK7_PADDING)
-			return self::removePK7Padding($padded,
-				mcrypt_get_block_size($this->_type, $this->_mode));
-		return $padded;
+		elseif($method == "aes-256-cbc")
+		{
+			$this->_type = MCRYPT_RIJNDAEL_128;
+			$this->_mode = "cbc";
+		}
+	}
+
+	/**
+	 * Encrypts $s with this cipher instance method and key.
+	 * @param $s A raw string to encrypt.
+	 * @return The result as a raw string, or null in case of error.
+	 */
+	public function encrypt($s)
+	{
+		$m = $this->load();
+		if($m === null)
+			return null;
+		$r = mcrypt_generic($m, $this->_padding == parent::PADDING_PKCS7
+				? self::addPKCS7Padding($s,
+					mcrypt_enc_get_block_size($m))
+				: $s);
+		$this->unload($m);
+		return $r;
+	}
+
+	/**
+	 * Performs $r rounds of encryption on $s with this cipher instance.
+	 * @param $s A raw string, that must have a correct length to be encrypted
+	 *        with no padding.
+	 * @param $r The number of encryption rounds to perform.
+	 * @return The result as a raw string, or null in case of error.
+	 */
+	public function encryptManyTimes($s, $r)
+	{
+		$m = $this->load();
+		if($m === null)
+			return null;
+		for($i = 0; $i < $r; $i++)
+			$s = mcrypt_generic($m, $s);
+		$this->unload($m);
+		return $s;
+	}
+
+	/**
+	 * Decrypts $s with this cipher instance method and key.
+	 * @param $s A raw string to decrypt.
+	 * @return The result as a raw string, or null in case of error.
+	 */
+	public function decrypt($s)
+	{
+		$m = $this->load();
+		if($m === null)
+			return null;
+		$padded = mdecrypt_generic($m, $s);
+		$r = $this->_padding == parent::PADDING_PKCS7
+			? self::removePKCS7Padding($padded,
+				mcrypt_enc_get_block_size($m))
+			: $padded;
+		$this->unload($m);
+		return $r;
 	}
 
 	/*******************
@@ -191,13 +306,54 @@ class CipherMcrypt
 	 *******************/
 
 	/**
-	 * Pads the given string $str with the PK7 padding scheme, so that its
+	 * Opens a mcrypt module.
+	 * @return A mcrypt module resource, or null if an error occurred.
+	 */
+	private function load()
+	{
+		if(strlen($this->_method) == 0 || strlen($this->_key) == 0)
+			return null;
+		$m = mcrypt_module_open($this->_type, '', $this->_mode, '');
+		if($m === false)
+			return null;
+		// This check is performed by mcrypt_generic_init, but it's better
+		// to do it now, because mcrypt_generic_init does not return a
+		// negative or false value if it fails.
+		$ivsize = mcrypt_enc_get_iv_size($m);
+		if(strlen($this->_iv) != $ivsize)
+		{
+			// In ECB (and some other modes), the IV is not used but still
+			// required to have the this size by mcrypt_generic_init, so
+			// let's make a fake one.
+			if(strtolower($this->_mode) == "ecb")
+				$ivsize = str_repeat("\0", $ivsize);
+			else
+				return null;
+		}
+		$r = @mcrypt_generic_init($m, $this->_key, $this->_iv);
+		if($r < 0 || $r === false)
+			return null;
+		return $m;
+	}
+
+	/**
+	 * Closes a mcrypt module.
+	 * @param $m A mcrypt module.
+	 */
+	private function unload($m)
+	{
+		mcrypt_generic_deinit($m);
+		mcrypt_module_close($m);
+	}
+
+	/**
+	 * Pads the given string $str with the PKCS7 padding scheme, so that its
 	 * length shall be a multiple of $blocksize.
 	 * @param $str A string to pad.
 	 * @param $blocksize The block size.
 	 * @return The resulting padded string.
 	 */
-	private static function addPK7Padding($str, $blocksize)
+	private static function addPKCS7Padding($str, $blocksize)
 	{
 		$len = strlen($str);
 		$pad = $blocksize - ($len % $blocksize);
@@ -205,11 +361,11 @@ class CipherMcrypt
 	}
 
 	/**
-	 * Tries to unpad the PK7-padded string $string.
+	 * Tries to unpad the PKCS7-padded string $string.
 	 * @param $string The string to unpad.
 	 * @return The unpadded string, or null in case of error.
 	 */
-	private static function removePK7Padding($string, $blocksize)
+	private static function removePKCS7Padding($string, $blocksize)
 	{
 		$len = strlen($string);
 		$padlen = ord($string[$len - 1]);

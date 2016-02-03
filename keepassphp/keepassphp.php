@@ -116,20 +116,33 @@ abstract class KeePassPHP
 		
 		self::$debug = $debug;
 
+		if(!defined("PHP_VERSION_ID") || PHP_VERSION_ID < 50300)
+		{
+			self::addDebug("PHP version must be >= 5.3 to run KeePassPHP.");
+			return false;
+		}
 		if(!extension_loaded("hash"))
 		{
 			self::addDebug("hash must be loaded to use KeePassPHP.");
 			return false;
 		}
-		if(!extension_loaded("mcrypt"))
+		if(PHP_VERSION_ID >= 50400 && extension_loaded("openssl"))
 		{
-			self::addDebug("mcrypt must be loaded to use KeePassPHP.");
-			return false;
+			self::addDebug("KeePassPHP will use the OpenSSL extension.");
 		}
-		if(!defined("MCRYPT_RIJNDAEL_128"))
+		else
 		{
-			self::addDebug("Rijndael 128 is not supported by your libmcrypt (it is probably too old).");
-			return false;
+			if(!extension_loaded("mcrypt"))
+			{
+				self::addDebug("mcrypt must be loaded to use KeePassPHP.");
+				return false;
+			}
+			if(!defined("MCRYPT_RIJNDAEL_128"))
+			{
+				self::addDebug("Rijndael 128 is not supported by your libmcrypt (it is probably too old).");
+				return false;
+			}
+			self::addDebug("KeePassPHP will use the Mcrypt extension.");
 		}
 
 		if($dataDir === null)

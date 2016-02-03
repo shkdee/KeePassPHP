@@ -17,6 +17,9 @@
         "ext-hash": "*",
         "ext-mcrypt": "*"
     },
+    "suggest": {
+        "ext-openssl": "A better and faster alternative to mcrypt"
+    },
     "autoload": {
         "files": ["keepassphp/keepassphp.php"]
     }
