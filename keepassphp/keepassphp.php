@@ -51,7 +51,6 @@ require_once "util/reader.php";
 require_once "util/gzdecode2.php";
 require_once "util/salsa20stream.php";
 require_once "util/filemanager.php";
-//require_once "util/uploadmanager.php";
 require_once "util/protectedstring.php";
 
 require_once "lib/protectedxmlreader.php";
@@ -615,7 +614,9 @@ abstract class KeePassPHP
 	public static function decryptFromKdbx($content, iKey $key, $headerHash,
 		&$error)
 	{
-		$result = KdbxFile::decrypt(new StringReader($content), $key, $error);
+		$reader = new StringReader($content);
+		$result = KdbxFile::decrypt($reader, $key, $error);
+		$reader->close();
 		if($result === null)
 			return null;
 		$content = $result->getContent();
@@ -659,8 +660,9 @@ abstract class KeePassPHP
 		}
 
 		$error = null;
-		$db = Database::loadFromKdbx(new StringReader($dbContent), $ckey,
-			$error);
+		$reader = new StringReader($dbContent);
+		$db = Database::loadFromKdbx($reader, $ckey, $error);
+		$reader->close();
 		if($db == null)
 			throw new KeePassPHPException($error);
 		return $db;
@@ -680,8 +682,10 @@ abstract class KeePassPHP
 			throw new KeePassPHPException(
 				"KphpDB file not found or void (ID = " . $dbid . ").");
 		$error = null;
-		$kphpdb = KphpDB::loadFromKdbx(new StringReader($kphpdbFile),
+		$reader = new StringReader($kphpdbFile);
+		$kphpdb = KphpDB::loadFromKdbx($reader,
 			new KeyFromPassword($kphpdbPwd, KdbxFile::HASH), $error);
+		$reader->close();
 		if($kphpdb == null)
 			throw new KeePassPHPException($error);
 		return $kphpdb;
