@@ -142,6 +142,7 @@ class KdbxHeader
 	 * Parses the content of a Reader as a KdbxHeader in binary format.
 	 * @param $reader A Reader that reads the header.
 	 * @param $hashAlgo The hash algorithm to use to compute the header hash.
+	 * @param &$error A string that will receive a message in case of error.
 	 * @return A new KdbxHeader instance if it could be correctly parsed from
 	 *         the reader, and null otherwise.
 	 */
