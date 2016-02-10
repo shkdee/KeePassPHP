@@ -380,6 +380,8 @@ abstract class KeePassPHP
 			return false;
 		}
 
+		$dbHash = null;
+		$keyFileHash = null;
 		try
 		{
 			if(self::$_kphpdbManager->existsKey($dbid))
@@ -395,7 +397,6 @@ abstract class KeePassPHP
 				throw new KeePassPHPException("Database file writing failed.");
 
 			// try to add the key file if it exists
-			$keyFileHash = null;
 			if(!empty($dbKeyContent))
 			{
 				$keyFileHash = self::$_keyManager->addWithKey(random_bytes(32),
@@ -423,6 +424,17 @@ abstract class KeePassPHP
 		}
 		catch(KeePassPHPException $exception)
 		{
+			if($dbHash != null)
+			{
+				if(!self::$_databaseManager->remove($dbHash))
+					self::addDebug("Cannot delete database '" . $dbHash ."'.");
+			}
+			if($keyFileHash != null)
+			{
+				if(!self::$_keyManager->remove($keyFileHash))
+					self::addDebug("Cannot delete key file '" .
+						$keyFileHash . "'.");
+			}
 			self::raiseError($exception);
 			return false;
 		}
