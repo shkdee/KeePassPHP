@@ -8,15 +8,15 @@ More generally, KeePassPHP can also encrypt and decrypt files in the same secure
 Examples
 ---------------------
 
-See KeePassPHP-UI, a web user interface directly using KeePassPHP to list all entries of a kdbx file, and then extract selected specific passwords on demand. Otherwise, The file keepassphp-cli.php is a command-line interface for KeePassPHP that also shows how to use almost everything provided by this library.
+See [KeePassPHP-UI](//github.com/shkdee/KeePassPHP-UI), a web user interface directly using KeePassPHP to list all entries of a kdbx file, and then extract selected specific passwords on demand. Otherwise, the file keepassphp-cli.php is a command-line interface for KeePassPHP that also shows how to use almost everything provided by this library.
 
 Library usages
 ---------------------
+KeePassPHP can be used at two levels.
 
-KeePassPHP can be used at a high-level, and at a low-level.
+At low-level, KeePassPHP exposes an API to decrypt and encrypt content with the same secure format as KeePass. This content can be an XML-formatted KeePass password database, but also any other kind of data. So KeePassPHP can be used as a simple and strong file encryption/decryption library. It also exposes an API to read kdbx password database content as a tree of PHP objects, providing easy and natural access to every entry stored inside the kdbx file.
 
-* High-level usage: [to be documented]
-* Low-level usage: [to be documented]
+At high-level, KeePassPHP can store kdbx files associated with a unique ID. This way, many users can store and access their password database easily, just with their ID and password. When used like this, KeePassPHP stores data internally in "kphpdb" files to associate each ID with a kdbx file and a possible key file, along with possibly more data to make it faster for users to access the list of entries of their kdbx files (see below).
 
 Internal kphpdb files
 ---------------------
@@ -36,14 +36,14 @@ Then, since your password database will be stored on that server, it must be har
 
 Another security problem to be aware of is that when you access KeePassPHP on a device which is not yours (which is typically the kind of usage you may have of KeePassPHP), you never know how much you can trust this device. It can have a keylogger that could sniff your main password, it can register the passwords you will probably copy in the clipboard, etc. Never use KeePassPHP - or any other password manager for that matter - on a computer you cannot trust!
 
-Finally, the idea of kphpdb files that are faster to decrypt than the real kdbx files can actually destroy the protection against brute-force password guessing. Indeed, if the *same* password is used to encrypt a kdbx file and its corresponding kphpdb file, it will be as easy to brute-force-guess that password as it is for the kphpdb file, which is by design easier than for the kdbx file. If different passwords are used, there is no risk, but then the user has to remember another password and that's not the spirit of a password manager. With KeePassPHP, if you use kphpdb files, you can chose to either use a completely different password, or to use only half of the kdbx file password to encrypt the kphpdb file. In the latter case, the other half of the password would still be hard to brute-force-guess.
+Finally, the idea of kphpdb files that are faster to decrypt than the real kdbx files can actually destroy the protection against brute-force password guessing. Indeed, if the *same* password is used to encrypt a kdbx file and its corresponding kphpdb file, it will be as easy to brute-force-guess that password as it is for the kphpdb file, which is by design easier than for the kdbx file. If different passwords are used, there is no risk, but then the user has to remember another password and that's not the spirit of a password manager. With KeePassPHP, if you use kphpdb files, you can choose to either use a completely different password, or to use only half of the kdbx file password to encrypt the kphpdb file. In the latter case, the other half of the password would still be hard to brute-force-guess.
 
 Note that this last problem only regards main password guessing; an attacker can still try to decrypt the content of the kdbx file without guessing the text password, and the complexity of this task is unchanged by the kphpdb file.
 
 API
 ---------------------
 
-[to be documented]
+[to be documented; see examples]
 
 Requirements
 ---------------------
