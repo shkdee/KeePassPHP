@@ -1,22 +1,22 @@
 <?php
 /**
- * Random_* Compatibility Library
+ * Random_* Compatibility Library 
  * for using the new PHP 7 random_* API in PHP 5 projects
- *
+ * 
  * The MIT License (MIT)
- *
+ * 
  * Copyright (c) 2015 Paragon Initiative Enterprises
- *
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- *
+ * 
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -26,39 +26,51 @@
  * SOFTWARE.
  */
 
-if (!function_exists('RandomCompat_intval')) {
-    
-    /**
-     * Cast to an integer if we can, safely.
-     * 
-     * If you pass it a float in the range (~PHP_INT_MAX, PHP_INT_MAX)
-     * (non-inclusive), it will sanely cast it to an int. If you it's equal to
-     * ~PHP_INT_MAX or PHP_INT_MAX, we let it fail as not an integer. Floats 
-     * lose precision, so the <= and => operators might accidentally let a float
-     * through.
-     * 
-     * @param numeric $number The number we want to convert to an int
-     * @param boolean $fail_open Set to true to not throw an exception
-     * 
-     * @return int (or float if $fail_open)
-     */
-    function RandomCompat_intval($number, $fail_open = false)
-    {
-        if (is_numeric($number)) {
-            $number += 0;
-        }
-        if (
-            is_float($number) &&
-            $number > ~PHP_INT_MAX &&
-            $number < PHP_INT_MAX
-        ) {
-            $number = (int) $number;
-        }
-        if (is_int($number) || $fail_open) {
-            return $number;
-        }
+
+/**
+ * Powered by ext/mcrypt (and thankfully NOT libmcrypt)
+ * 
+ * @ref https://bugs.php.net/bug.php?id=55169
+ * @ref https://github.com/php/php-src/blob/c568ffe5171d942161fc8dda066bce844bdef676/ext/mcrypt/mcrypt.c#L1321-L1386
+ * 
+ * @param int $bytes
+ * 
+ * @throws Exception
+ * 
+ * @return string
+ */
+function random_bytes($bytes)
+{
+    try {
+        $bytes = RandomCompat_intval($bytes);
+    } catch (TypeError $ex) {
         throw new TypeError(
-            'Expected an integer.'
+            'random_bytes(): $bytes must be an integer'
         );
     }
+
+    if ($bytes < 1) {
+        throw new Error(
+            'Length must be greater than 0'
+        );
+    }
+
+    $buf = @mcrypt_create_iv($bytes, MCRYPT_DEV_URANDOM);
+    if (
+        $buf !== false
+        &&
+        RandomCompat_strlen($buf) === $bytes
+    ) {
+        /**
+         * Return our random entropy buffer here:
+         */
+        return $buf;
+    }
+
+    /**
+     * If we reach here, PHP has failed us.
+     */
+    throw new Exception(
+        'Could not gather sufficient random data'
+    );
 }

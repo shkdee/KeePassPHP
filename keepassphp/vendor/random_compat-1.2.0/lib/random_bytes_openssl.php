@@ -26,12 +26,12 @@
  * SOFTWARE.
  */
 
-
 /**
- * Powered by ext/mcrypt (and thankfully NOT libmcrypt)
+ * Since openssl_random_pseudo_bytes() uses openssl's 
+ * RAND_pseudo_bytes() API, which has been marked as deprecated by the
+ * OpenSSL team, this is our last resort before failure.
  * 
- * @ref https://bugs.php.net/bug.php?id=55169
- * @ref https://github.com/php/php-src/blob/c568ffe5171d942161fc8dda066bce844bdef676/ext/mcrypt/mcrypt.c#L1321-L1386
+ * @ref https://www.openssl.org/docs/crypto/RAND_bytes.html
  * 
  * @param int $bytes
  * 
@@ -48,21 +48,32 @@ function random_bytes($bytes)
             'random_bytes(): $bytes must be an integer'
         );
     }
+
     if ($bytes < 1) {
         throw new Error(
             'Length must be greater than 0'
         );
     }
 
-    $buf = @mcrypt_create_iv($bytes, MCRYPT_DEV_URANDOM);
-    if ($buf !== false) {
-        if (RandomCompat_strlen($buf) === $bytes) {
-            /**
-             * Return our random entropy buffer here:
-             */
-            return $buf;
-        }
+    /**
+     * $secure is passed by reference. If it's set to false, fail. Note
+     * that this will only return false if this function fails to return
+     * any data.
+     * 
+     * @ref https://github.com/paragonie/random_compat/issues/6#issuecomment-119564973
+     */
+    $secure = true;
+    $buf = openssl_random_pseudo_bytes($bytes, $secure);
+    if (
+        $buf !== false
+        &&
+        $secure
+        &&
+        RandomCompat_strlen($buf) === $bytes
+    ) {
+        return $buf;
     }
+
     /**
      * If we reach here, PHP has failed us.
      */

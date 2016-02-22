@@ -44,7 +44,7 @@ class KeePassPHPException extends \Exception
  * sure we will try to add or get a database file.
  */
 
-require_once "vendor/random_compat-1.1.4/lib/random.php";
+require_once "vendor/random_compat-1.2.0/lib/random.php";
 
 require_once "util/cipher.php";
 require_once "util/reader.php";

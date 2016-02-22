@@ -17,7 +17,8 @@ function usageAndDie()
 
 function KPHPDebugAndDie($msg)
 {
-	echo "\nError: $msg\n", "Debug data:\n", KeePassPHP::$debugData, "\n";
+	echo "\nError: $msg\n", "Debug data:\n",
+		\KeePassPHP\KeePassPHP::$debugData, "\n";
 	die();
 }
 
@@ -216,7 +217,7 @@ else if($command == "encrypt" || $command == "decrypt")
 		? KeePassPHP::encryptInKdbx($fileContent, $ckey, 6000, $error)
 		: KeePassPHP::decryptFromKdbx($fileContent, $ckey, true, $error);
 	if($result === null)
-		KPHPDebugAndDie();
+		KPHPDebugAndDie($error);
 	echo $result;
 }
 
