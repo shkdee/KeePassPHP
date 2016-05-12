@@ -253,7 +253,7 @@ class FileManager
 							self::TYPE_FILE, $file);
 			}
 			elseif(!$this->acceptMem)
-				throw new Exception("The directory " . $this->dir .
+				throw new \Exception("The directory " . $this->dir .
 					" does not exist and cannot be created.");
 			else
 				$this->acceptFiles = false;
