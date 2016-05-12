@@ -3,6 +3,9 @@
  * Random_* Compatibility Library
  * for using the new PHP 7 random_* API in PHP 5 projects
  *
+ * @version 2.0.2
+ * @released 2016-04-03
+ *
  * The MIT License (MIT)
  *
  * Copyright (c) 2015 Paragon Initiative Enterprises
@@ -89,10 +92,10 @@ if (PHP_VERSION_ID < 70000) {
                     PATH_SEPARATOR,
                     strtolower($RandomCompat_basedir)
                 );
-                $RandomCompatUrandom = in_array(
-                    '/dev',
+                $RandomCompatUrandom = (array() !== array_intersect(
+                    array('/dev', '/dev/', '/dev/urandom'),
                     $RandomCompat_open_basedir
-                );
+                ));
                 $RandomCompat_open_basedir = null;
             }
 
@@ -113,8 +116,9 @@ if (PHP_VERSION_ID < 70000) {
                 require_once $RandomCompatDIR.'/random_bytes_dev_urandom.php';
             }
             // Unset variables after use
-            $RandomCompatUrandom = null;
             $RandomCompat_basedir = null;
+        } else {
+            $RandomCompatUrandom = false;
         }
 
         /**
@@ -126,10 +130,20 @@ if (PHP_VERSION_ID < 70000) {
             PHP_VERSION_ID >= 50307
             &&
             extension_loaded('mcrypt')
+            &&
+            (DIRECTORY_SEPARATOR !== '/' || $RandomCompatUrandom)
         ) {
-            // See random_bytes_mcrypt.php
-            require_once $RandomCompatDIR.'/random_bytes_mcrypt.php';
+            // Prevent this code from hanging indefinitely on non-Windows;
+            // see https://bugs.php.net/bug.php?id=69833
+            if (
+                DIRECTORY_SEPARATOR !== '/' || 
+                (PHP_VERSION_ID <= 50609 || PHP_VERSION_ID >= 50613)
+            ) {
+                // See random_bytes_mcrypt.php
+                require_once $RandomCompatDIR.'/random_bytes_mcrypt.php';
+            }
         }
+        $RandomCompatUrandom = null;
 
         if (
             !function_exists('random_bytes')
@@ -156,30 +170,6 @@ if (PHP_VERSION_ID < 70000) {
             }
             $RandomCompat_disabled_classes = null;
             $RandomCompatCOMtest = null;
-        }
-
-        /**
-         * openssl_random_pseudo_bytes()
-         */
-        if (
-            (
-                // Unix-like with PHP >= 5.3.0 or
-                (
-                    DIRECTORY_SEPARATOR === '/'
-                    &&
-                    PHP_VERSION_ID >= 50300
-                )
-                ||
-                // Windows with PHP >= 5.4.1
-                PHP_VERSION_ID >= 50401
-            )
-            &&
-            !function_exists('random_bytes')
-            &&
-            extension_loaded('openssl')
-        ) {
-            // See random_bytes_openssl.php
-            require_once $RandomCompatDIR.'/random_bytes_openssl.php';
         }
 
         /**
