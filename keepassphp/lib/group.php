@@ -167,14 +167,17 @@ class Group
 		}
 		return $group;
 	}
-
-	/**
-	 * Creates a new Group instance from a ProtectedXMLReader instance reading
-	 * a KeePass 2.x database and located at a Group element node.
-	 * @param $reader A XML reader.
-	 * @return A Group instance if the parsing went okay, null otherwise.
-	 */
-	public static function loadFromXML(ProtectedXMLReader $reader)
+    
+    /**
+     * Creates a new Group instance from a ProtectedXMLReader instance reading
+     * a KeePass 2.x database and located at a Group element node.
+     *
+     * @param ProtectedXMLReader $reader       A XML reader.
+     * @param bool|string        $extra_fields [optional] A string with a regular expression for the include extra fields
+     *
+     * @return Group A Group instance if the parsing went okay, null otherwise.
+     */
+	public static function loadFromXML(ProtectedXMLReader $reader, $extra_fields = false)
 	{
 		if($reader == null)
 			return null;
@@ -183,9 +186,9 @@ class Group
 		while($reader->read($d))
 		{
 			if($reader->isElement(Database::XML_GROUP))
-				$group->addGroup(Group::loadFromXML($reader));
+				$group->addGroup(Group::loadFromXML($reader, $extra_fields));
 			elseif($reader->isElement(Database::XML_ENTRY))
-				$group->addEntry(Entry::loadFromXML($reader));
+				$group->addEntry(Entry::loadFromXML($reader, $extra_fields));
 			elseif($reader->isElement(Database::XML_UUID))
 				$group->uuid = $reader->readTextInside();
 			elseif($reader->isElement(Database::XML_NAME))
