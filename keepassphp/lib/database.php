@@ -37,6 +37,7 @@ class Database
 	const KEY_TITLE = "Title";
 	const KEY_USERNAME = "UserName";
 	const KEY_URL = "URL";
+	const KEY_EXTRA = "EXTRA";
 
 	const GROUPS = "Groups";
 	const ENTRIES = "Entries";
@@ -144,14 +145,16 @@ class Database
 			$this->_groups[] = $group;
 		}
 	}
-
-	/**
-	 * Loads the content of a Database from a ProtectedXMLReader instance
-	 * reading a KeePass 2.x database and located at a KeePass file element
-	 * node.
-	 * @param $reader A XML reader.
-	 */
-	private function parseXML(ProtectedXMLReader $reader)
+    
+    /**
+     * Loads the content of a Database from a ProtectedXMLReader instance
+     * reading a KeePass 2.x database and located at a KeePass file element
+     * node.
+     *
+     * @param ProtectedXMLReader $reader       A XML reader.
+     * @param bool|string        $extra_fields [optional] A string with a regular expression for the include extra fields
+     */
+	private function parseXML(ProtectedXMLReader $reader, $extra_fields = false)
 	{
 		$d = $reader->depth();
 		while($reader->read($d))
@@ -182,7 +185,7 @@ class Database
 				while($reader->read($rootD))
 				{
 					if($reader->isElement(self::XML_GROUP))
-						$this->addGroup(Group::loadFromXML($reader));
+						$this->addGroup(Group::loadFromXML($reader, $extra_fields));
 				}
 			}
 		}
@@ -241,17 +244,20 @@ class Database
 		$error = null;
 		return $db;
 	}
-
-	/**
-	 * Creates a new Database instance from an XML string with the format of
-	 * a KeePass 2.x database.
-	 * @param $xml An XML string.
-	 * @param $randomStream A iRandomStream instance to decrypt protected data.
-	 * @param &$error A string that will receive a message in case of error.
-	 * @return A Database instance if the parsing went okay, null otherwise.
-	 */
+    
+    /**
+     * Creates a new Database instance from an XML string with the format of
+     * a KeePass 2.x database.
+     *
+     * @param string        $xml          An XML string.
+     * @param iRandomStream $randomStream A iRandomStream instance to decrypt protected data.
+     * @param string        &$error       A string that will receive a message in case of error.
+     * @param bool|string   $extra_fields [optional] A string with a regular expression for the include extra fields
+     *
+     * @return Database A Database instance if the parsing went okay, null otherwise.
+     */
 	public static function loadFromXML($xml, iRandomStream $randomStream,
-		&$error)
+		&$error, $extra_fields = false)
 	{
 		$reader = new ProtectedXMLReader($randomStream);
 		if(!$reader->XML($xml) || !$reader->read(-1))
@@ -267,7 +273,7 @@ class Database
 			return null;
 		}
 		$db = new Database();
-		$db->parseXML($reader);
+		$db->parseXML($reader, $extra_fields);
 		$reader->close();
 		if($db->_name == null && $db->_groups == null)
 		{
@@ -277,21 +283,24 @@ class Database
 		$error = null;
 		return $db;
 	}
-
-	/**
-	 * Creates a new Database instance from a .kdbx (KeePass 2.x) file.
-	 * @param $reader A Reader instance that reads a .kdbx file.
-	 * @param $key A iKey instance to use to decrypt the .kdbx file.
-	 * @param &$error A string that will receive a message in case of error.
-	 * @return A Database instance if the parsing went okay, null otherwise.
-	 */
-	public static function loadFromKdbx(Reader $reader, iKey $key, &$error)
+    
+    /**
+     * Creates a new Database instance from a .kdbx (KeePass 2.x) file.
+     *
+     * @param Reader      $reader       A Reader instance that reads a .kdbx file.
+     * @param iKey        $key          A iKey instance to use to decrypt the .kdbx file.
+     * @param string      &$error       A string that will receive a message in case of error.
+     * @param bool|string $extra_fields [optional] A string with a regular expression for the include extra fields
+     *
+     * @return Database A Database instance if the parsing went okay, null otherwise.
+     */
+	public static function loadFromKdbx(Reader $reader, iKey $key, &$error, $extra_fields = false)
 	{
 		$kdbx = KdbxFile::decrypt($reader, $key, $error);
 		if($kdbx == null)
 			return null;
 		$db = self::loadFromXML($kdbx->getContent(), $kdbx->getRandomStream(),
-			$error);
+			$error, $extra_fields);
 		if($db == null)
 			return null;
 		if($db->_headerHash !== $kdbx->getHeaderHash())
