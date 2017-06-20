@@ -63,9 +63,8 @@ if (PHP_VERSION_ID < 70000) {
          * In order of preference:
          *   1. Use libsodium if available.
          *   2. fread() /dev/urandom if available (never on Windows)
-         *   3. mcrypt_create_iv($bytes, MCRYPT_DEV_URANDOM)
-         *   4. COM('CAPICOM.Utilities.1')->GetRandom()
-         *   5. openssl_random_pseudo_bytes() (absolute last resort)
+         *   3. COM('CAPICOM.Utilities.1')->GetRandom()
+         *   4. openssl_random_pseudo_bytes() (absolute last resort)
          *
          * See ERRATA.md for our reasoning behind this particular order
          */
@@ -121,28 +120,6 @@ if (PHP_VERSION_ID < 70000) {
             $RandomCompatUrandom = false;
         }
 
-        /**
-         * mcrypt_create_iv()
-         */
-        if (
-            !function_exists('random_bytes')
-            &&
-            PHP_VERSION_ID >= 50307
-            &&
-            extension_loaded('mcrypt')
-            &&
-            (DIRECTORY_SEPARATOR !== '/' || $RandomCompatUrandom)
-        ) {
-            // Prevent this code from hanging indefinitely on non-Windows;
-            // see https://bugs.php.net/bug.php?id=69833
-            if (
-                DIRECTORY_SEPARATOR !== '/' || 
-                (PHP_VERSION_ID <= 50609 || PHP_VERSION_ID >= 50613)
-            ) {
-                // See random_bytes_mcrypt.php
-                require_once $RandomCompatDIR.'/random_bytes_mcrypt.php';
-            }
-        }
         $RandomCompatUrandom = null;
 
         if (
