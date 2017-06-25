@@ -126,7 +126,7 @@ abstract class Cipher
 
 /**
  * A Cipher implementation based on the OpenSSL PHP extension. This class
- * should be preferred over CipherMcrypt if the OpenSSL extension if available,
+ * should be preferred over CipherMcrypt if the OpenSSL extension is available,
  * as OpenSSL is faster and more reliable than libmcrypt.
  */
 class CipherOpenSSL extends Cipher
