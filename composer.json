@@ -14,8 +14,7 @@
     ],
     "require": {
         "php": ">=5.3.0",
-        "ext-hash": "*",
-        "ext-mcrypt": "*"
+        "ext-hash": "*"
     },
     "suggest": {
         "ext-openssl": "A better and faster alternative to mcrypt"
