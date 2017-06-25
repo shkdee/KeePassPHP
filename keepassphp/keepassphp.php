@@ -129,19 +129,23 @@ abstract class KeePassPHP
 		{
 			self::addDebug("KeePassPHP will use the OpenSSL extension.");
 		}
+		else if(!extension_loaded("mcrypt"))
+		{
+			self::addDebug("No suitable cryptography extension found.");
+			return false;
+		}
+		else if(!defined("MCRYPT_RIJNDAEL_128"))
+		{
+			self::addDebug("Rijndael 128 is not supported by your libmcrypt (it is probably too old).");
+			return false;
+		}
 		else
 		{
-			if(!extension_loaded("mcrypt"))
-			{
-				self::addDebug("mcrypt must be loaded to use KeePassPHP.");
-				return false;
-			}
-			if(!defined("MCRYPT_RIJNDAEL_128"))
-			{
-				self::addDebug("Rijndael 128 is not supported by your libmcrypt (it is probably too old).");
-				return false;
-			}
 			self::addDebug("KeePassPHP will use the Mcrypt extension.");
+			if(PHP_VERSION_ID >= 70100)
+			{
+				self::addDebug("The Mcrypt extension is deprecated since PHP 7.1. KeePassPHP will use it anyway, but consider installing OpenSSL.");
+			}
 		}
 
 		if($dataDir === null)
