@@ -152,16 +152,16 @@ class KdbxFile
 		if($cipherMethod === null)
 		{
 			$error = "Kdbx file encrypt: unkown cipher.";
-			return null;	
+			return null;
 		}
 
 		$hashedContent = HashedBlockReader::hashString($content, self::HASH);
 		$transformedKey = self::transformKey($key, $header);
 		$cipher = Cipher::Create($cipherMethod, $transformedKey,
 			$header->encryptionIV);
-		if($cipher == null)
+		if($cipher == null || $transformedKey == null)
 		{
-			$error = "Kdbx file encrypt: cannot create cipher.";
+			$error = "Kdbx file encrypt: cannot create cipher (no suitable cryptography extension found).";
 			return null;
 		}
 		$encrypted = $cipher->encrypt($header->startBytes . $hashedContent);
@@ -247,15 +247,15 @@ class KdbxFile
 		if($cipherMethod === null)
 		{
 			$error = "Kdbx file decrypt: unkown cipher.";
-			return null;	
+			return null;
 		}
 
 		$transformedKey = self::transformKey($key, $header);
 		$cipher = Cipher::Create($cipherMethod, $transformedKey,
 			$header->encryptionIV);
-		if($cipher == null)
+		if($cipher == null || $transformedKey == null)
 		{
-			$error = "Kdbx file decrypt: cannot create cipher.";
+			$error = "Kdbx file encrypt: cannot create cipher (no suitable cryptography extension found).";
 			return null;
 		}
 		$decrypted = $cipher->decrypt($reader->readToTheEnd());
@@ -299,13 +299,16 @@ class KdbxFile
 	 * Computes the AES encryption key of a Kdbx file from its keys and header.
 	 * @param $key The encryption key.
 	 * @param $header The Kdbx file header.
-	 * @return A 32-byte-long string that can be used as an AES key.
+	 * @return A 32-byte-long string that can be used as an AES key, or null
+	 *         if no suitable cryptography extension is laoded.
 	 */
 	private static function transformKey(iKey $key, KdbxHeader $header)
 	{
 		$keyHash = $key->getHash();
 		$cipher = Cipher::Create('aes-256-ecb', $header->transformSeed,
 			"", Cipher::PADDING_NONE);
+		if($cipher == null)
+			return null;
 		// We have to do $rounds encryptions, where $rounds is a 64 bit
 		// unsigned integer. Since PHP does not handle 64 bit integers in a
 		// clear way, nor 32 bit unsigned integers, it is safer to take

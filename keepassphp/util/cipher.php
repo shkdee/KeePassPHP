@@ -105,8 +105,8 @@ abstract class Cipher
 
 	/**
 	 * Creates a new Cipher instance of one of the implementing classes,
-	 * depending on the available extensions. Currently, CipherOpenSSL will be
-	 * chosen in priority if possible, otherwise CipherMcrypt will be used.
+	 * depending on the available extensions, or returns null if no extension
+	 * is available.
 	 * If $method and $key are null and are not set in some way before
 	 * encrypting or decrypting, the operation will fail miserably.
 	 * @param $method The OpenSSL method to use.
@@ -114,13 +114,17 @@ abstract class Cipher
 	 * @param $iv The initialization vector, or "" if none are needed.
 	 * @param $padding The type of padding to use. Must be one of the constants
 	 *        self::PADDING_*.
+	 * @return A Cipher instance, or null if no suitable crypto library is
+	 *         loaded.
 	 */
 	public static function Create($method, $key = null, $iv = "",
 		$padding = self::PADDING_PKCS7)
 	{
 		return (PHP_VERSION_ID >= 50400 && extension_loaded("openssl"))
 			? new CipherOpenSSL($method, $key, $iv, $padding)
-			: new CipherMcrypt($method, $key, $iv, $padding);
+			: extension_loaded("mcrypt") && defined("MCRYPT_RIJNDAEL_128")
+				? new CipherMcrypt($method, $key, $iv, $padding)
+				: null;
 	}
 }
 
