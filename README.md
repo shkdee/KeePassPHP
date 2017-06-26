@@ -47,7 +47,11 @@ API
 
 Requirements
 ---------------------
-KeePassPHP should work with PHP 5.3 and higher, with the common crypto library mcrypt. Alternately, with PHP 5.4 and higher, KeePassPHP can (and will) use openssl if available instead of mcrypt. Openssl is faster and more reliable than mcrypt, so it is strongly suggested to load this extension when using KeePassPHP.
+The recommended environment to run KeePassPHP is PHP 5.4 and higher, with the rather common OpenSSL extension.
+
+KeePassPHP should actually work with PHP 5.3 and higher, and can use the common crypto library mcrypt when OpenSSL is not available (or when the PHP version is lower than 5.4). But OpenSSL is much faster and more reliable than mcrypt, so it is strongly suggested to load it when using KeePassPHP. Moreover, with PHP 7.2 and higher, mcrypt is no longer included in PHP by default, so OpenSSL is actually required in this case.
+
+Note that using very high-level crypto libraries like libsodium or NaCl is not possible for KeePassPHP (as I understand those libraries), because some very specific ciphers (AES 256, CBC and ECB) are required to decrypt the very specific format of kdbx files, and these ciphers are not exposed by those libraries.
 
 License
 ---------------------
