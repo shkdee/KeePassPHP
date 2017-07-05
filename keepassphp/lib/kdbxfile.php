@@ -255,7 +255,7 @@ class KdbxFile
 			$header->encryptionIV);
 		if($cipher == null || $transformedKey == null)
 		{
-			$error = "Kdbx file encrypt: cannot create cipher (no suitable cryptography extension found).";
+			$error = "Kdbx file decrypt: cannot create cipher (no suitable cryptography extension found).";
 			return null;
 		}
 		$decrypted = $cipher->decrypt($reader->readToTheEnd());
