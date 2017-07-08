@@ -577,15 +577,18 @@ abstract class KeePassPHP
 		$mkey->addKey($k);
 		return true;
 	}
-
-	/**
-	 * Opens a KeePass password database (.kdbx) file with the key $mkey.
-	 * @param $file The path of a KeePass password database file.
-	 * @param $mkey A master key.
-	 * @param &$error A string that will receive a message in case of error.
-	 * @return A new Database instance, or null in case of error.
-	 */
-	public static function openDatabaseFile($file, iKey $mkey, &$error)
+    
+    /**
+     * Opens a KeePass password database (.kdbx) file with the key $mkey.
+     *
+     * @param string      $file         The path of a KeePass password database file.
+     * @param iKey        $mkey         A master key.
+     * @param string      &$error       A string that will receive a message in case of error.
+     * @param bool|string $extra_fields [optional] A string with a regular expression for the include extra fields
+     *
+     * @return Database A new Database instance, or null in case of error.
+     */
+	public static function openDatabaseFile($file, iKey $mkey, &$error, $extra_fields = false)
 	{
 		$reader = ResourceReader::openFile($file);
 		if($reader == null)
@@ -593,7 +596,7 @@ abstract class KeePassPHP
 			$error = "file '" . $file . '" does not exist.';
 			return null;
 		}
-		$db = Database::loadFromKdbx($reader, $mkey, $error);
+		$db = Database::loadFromKdbx($reader, $mkey, $error, $extra_fields);
 		$reader->close();
 		return $db;
 	}

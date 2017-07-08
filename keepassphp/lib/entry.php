@@ -49,6 +49,9 @@ class Entry
 	 * Array of entries of this entry's history (if non null).
 	 */
 	public $history;
+	
+	/** Array of additional data fields */
+	public $extra;
 
 	public function __construct()
 	{
@@ -61,6 +64,7 @@ class Entry
 		$this->username = null;
 		$this->password = null;
 		$this->history = null;
+		$this->extra = null;
 	}
 
 	/**
@@ -76,12 +80,14 @@ class Entry
 			$this->history[] = $entry;
 		}
 	}
-
-	/**
-	 * Parses a string XML element node.
-	 * @param $reader A XML reader located at a string element node.
-	 */
-	private function readString(ProtectedXMLReader $reader)
+    
+    /**
+     * Parses a string XML element node.
+     *
+     * @param ProtectedXMLReader $reader       A XML reader located at a string element node.
+     * @param bool|string        $extra_fields [optional] A string with a regular expression for the include extra fields
+     */
+	private function readString(ProtectedXMLReader $reader, $extra_fields = false)
 	{
 		$d = $reader->depth();
 		$key = null;
@@ -103,6 +109,8 @@ class Entry
 			$this->username = $value->getPlainString();
 		elseif(\strcasecmp($key, Database::KEY_TITLE) == 0)
 			$this->title = $value->getPlainString();
+	    elseif ($extra_fields !== false && @preg_match($extra_fields, $key))
+	        $this->extra[$key] = $value->getPlainString();
 	}
 
 	/**
@@ -134,6 +142,8 @@ class Entry
 				$history[] = $entry->toArray();
 			$result[Database::XML_HISTORY] = $history;
 		}
+		if($this->extra != null)
+			$result[Database::KEY_EXTRA] = $this->extra;
 		return $result;
 	}
 
@@ -155,6 +165,7 @@ class Entry
 		$entry->url = Database::getIfSet($array, Database::KEY_URL);
 		$entry->username = Database::getIfSet($array, Database::KEY_USERNAME);
 		$entry->title = Database::getIfSet($array, Database::KEY_TITLE);
+		$entry->extra = Database::getIfSet($array, Database::KEY_EXTRA);
 		$history = Database::getIfSet($array, Database::XML_HISTORY);
 		if(!empty($history))
 		{
@@ -163,14 +174,17 @@ class Entry
 		}
 		return $entry;
 	}
-
-	/**
-	 * Creates a new Entry instance from a ProtectedXMLReader instance reading
-	 * a KeePass 2.x database and located at an Entry element node.
-	 * @param $reader A XML reader.
-	 * @return A Entry instance if the parsing went okay, null otherwise.
-	 */
-	public static function loadFromXML(ProtectedXMLReader $reader)
+    
+    /**
+     * Creates a new Entry instance from a ProtectedXMLReader instance reading
+     * a KeePass 2.x database and located at an Entry element node.
+     *
+     * @param ProtectedXMLReader $reader       A XML reader.
+     * @param bool|string        $extra_fields [optional] A string with a regular expression for the include extra fields
+     *
+     * @return Entry A Entry instance if the parsing went okay, null otherwise.
+     */
+	public static function loadFromXML(ProtectedXMLReader $reader, $extra_fields = false)
 	{
 		if($reader == null)
 			return null;
@@ -187,7 +201,7 @@ class Entry
 			else if($reader->isElement(Database::XML_TAGS))
 				$entry->tags = $reader->readTextInside();
 			elseif($reader->isElement(Database::XML_STRING))
-				$entry->readString($reader);
+				$entry->readString($reader, $extra_fields);
 			elseif($reader->isElement(Database::XML_HISTORY))
 			{
 				$historyD = $reader->depth();
