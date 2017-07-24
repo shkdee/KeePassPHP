@@ -61,9 +61,9 @@ function visitGroup(\KeePassPHP\Group $group, $indent)
 function visitEntry(\KeePassPHP\Entry $entry, $indent)
 {
 	echo str_pad("", $indent, " "),
-		$entry->uuid, "\t => ", $entry->title,
-		"\t", $entry->username,
-		"\t", $entry->url, "\n";
+		$entry->uuid, "\t => ", $entry->getStringField(\KeePassPHP\Database::KEY_TITLE),
+		"\t", $entry->getStringField(\KeePassPHP\Database::KEY_USERNAME),
+		"\t", $entry->getStringField(\KeePassPHP\Database::KEY_URL), "\n";
 }
 
 $count = isset($argc) ? intval($argc) : 0;

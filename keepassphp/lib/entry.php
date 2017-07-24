@@ -26,25 +26,20 @@ class Entry
 	 */
 	public $customIcon;
 	/**
-	 * title of this entry (if non null).
-	 */
-	public $title;
-	/**
 	 * tags of this entry (if non null).
 	 */
 	public $tags;
 	/**
-	 * url of this entry (if non null).
-	 */
-	public $url;
-	/**
-	 * username of this entry (if non null).
-	 */
-	public $username;
-	/**
 	 * iBoxedString instance containing the password of this entry (if non null).
 	 */
 	public $password;
+	/**
+	 * string fields of this entry as a map (key => value as an iBoxedString
+	 * instance). It contains all the standard string fields of KeePass except
+	 * password (notes, title, url, username), and all custom user-defined
+	 * string fields.
+	 */
+	public $stringFields;
 	/**
 	 * Array of entries of this entry's history (if non null).
 	 */
@@ -55,12 +50,23 @@ class Entry
 		$this->uuid = null;
 		$this->icon = null;
 		$this->customIcon = null;
-		$this->title = null;
 		$this->tags = null;
-		$this->url = null;
-		$this->username = null;
 		$this->password = null;
+		$this->stringFields = array();
 		$this->history = null;
+	}
+
+	/**
+	 * Gets the string value of this Entry string field corresponding to the
+	 * given key, or an empty string of no field with that key exists.
+	 * @param $key A key.
+	 * @return A non-null string, containing the value of the field.
+	 */
+	function getStringField($key)
+	{
+		return isset($this->stringFields[$key])
+			? $this->stringFields[$key]->getPlainString()
+			: "";
 	}
 
 	/**
@@ -97,42 +103,51 @@ class Entry
 			return;
 		if(\strcasecmp($key, Database::KEY_PASSWORD) == 0)
 			$this->password = $value;
-		elseif(\strcasecmp($key, Database::KEY_URL) == 0)
-			$this->url = $value->getPlainString();
-		elseif(\strcasecmp($key, Database::KEY_USERNAME) == 0)
-			$this->username = $value->getPlainString();
-		elseif(\strcasecmp($key, Database::KEY_TITLE) == 0)
-			$this->title = $value->getPlainString();
+		else
+			$this->stringFields[$key] = $value;
 	}
 
 	/**
-	 * Creates an array describing this entry, containing everything except
-	 * password. This array can be serialized to json safely.
-	 * @return An array containing this entry (except password).
+	 * Creates an array describing this entry (with respect to the filter).
+	 * This array can be safely serialized to json after.
+	 * @param $filter A filter to select the data that is actually copied to
+	 *                the array.
+	 * @return An array containing this entry.
 	 */
-	public function toArray()
+	public function toArray(iFilter $filter)
 	{
 		$result = array();
 		if($this->uuid != null)
 			$result[Database::XML_UUID] = $this->uuid;
-		if($this->icon != null)
+		if($this->icon != null && $filter->acceptIcons())
 			$result[Database::XML_ICONID] = $this->icon;
-		if($this->customIcon != null)
+		if($this->customIcon != null && $filter->acceptIcons())
 			$result[Database::XML_CUSTOMICONUUID] = $this->customIcon;
-		if($this->tags != null)
+		if($this->tags != null && $filter->acceptTags())
 			$result[Database::XML_TAGS] = $this->tags;
-		if($this->url != null)
-			$result[Database::KEY_URL] = $this->url;
-		if($this->username != null)
-			$result[Database::KEY_USERNAME] = $this->username;
-		if($this->title != null)
-			$result[Database::KEY_TITLE] = $this->title;
+		$stringFields = array();
+		if($this->password != null && $filter->acceptPasswords())
+			$stringFields[Database::KEY_PASSWORD] = $this->password->getPlainString();
+		if(!empty($this->stringFields))
+		{
+			foreach($this->stringFields as $key => &$value)
+			{
+				if($filter->acceptStrings($key))
+					$stringFields[$key] = $value->getPlainString();
+			}
+		}
+		if(!empty($stringFields))
+			$result[Database::KEY_STRINGFIELDS] = $stringFields;
 		if($this->history != null)
 		{
 			$history = array();
 			foreach($this->history as &$entry)
-				$history[] = $entry->toArray();
-			$result[Database::XML_HISTORY] = $history;
+			{
+				if($filter->acceptHistoryEntry($entry))
+					$history[] = $entry->toArray($filter);
+			}
+			if(!empty($history))
+				$result[Database::XML_HISTORY] = $history;
 		}
 		return $result;
 	}
@@ -141,9 +156,10 @@ class Entry
 	 * Creates a new Entry instance from an array created by the method
 	 * toArray() of another Entry instance.
 	 * @param $array An array created by the method toArray().
+	 * @param $version The version of the array format.
 	 * @return A Entry instance if the parsing went okay, null otherwise.
 	 */
-	public static function loadFromArray(array $array)
+	public static function loadFromArray(array $array, $version)
 	{
 		if($array == null)
 			return null;
@@ -152,14 +168,31 @@ class Entry
 		$entry->icon = Database::getIfSet($array, Database::XML_ICONID);
 		$entry->customIcon = Database::getIfSet($array, Database::XML_CUSTOMICONUUID);
 		$entry->tags = Database::getIfSet($array, Database::XML_TAGS);
-		$entry->url = Database::getIfSet($array, Database::KEY_URL);
-		$entry->username = Database::getIfSet($array, Database::KEY_USERNAME);
-		$entry->title = Database::getIfSet($array, Database::KEY_TITLE);
+		if($version <= KphpDB::VERSION_0)
+		{
+			$keys = array(Database::KEY_TITLE, Database::KEY_USERNAME,
+				Database::KEY_URL);
+			foreach($keys as $key)
+			{
+				$value = Database::getIfSet($array, $key);
+				if($value != null)
+					$entry->stringFields[$key] = new UnprotectedString($value);
+			}
+		}
+		else
+		{
+			$stringFields = Database::getIfSet($array, Database::KEY_STRINGFIELDS);
+			if(!empty($stringFields))
+			{
+				foreach($stringFields as $key => $value)
+					$entry->stringFields[$key] = new UnprotectedString($value);
+			}
+		}
 		$history = Database::getIfSet($array, Database::XML_HISTORY);
 		if(!empty($history))
 		{
 			foreach($history as &$e)
-				$entry->addHistoryEntry(self::loadFromArray($e));
+				$entry->addHistoryEntry(self::loadFromArray($e, $version));
 		}
 		return $entry;
 	}

@@ -30,9 +30,9 @@ abstract class Cipher
 	 * @param $method One of the OpenSSL ciphers constants.
 	 * @param $key A binary string used as key (must be of correct length).
 	 * @param $iv A binary string used as initialization vector (must be of
-	 *        correct length), or "" if none are needed.
+	 *            correct length), or "" if none are needed.
 	 * @param $padding The type of padding to use. Must be one of the constants
-	 *        self::PADDING_*.
+	 *                 self::PADDING_*.
 	 */
 	protected function __construct($method, $key, $iv, $padding)
 	{
@@ -63,7 +63,7 @@ abstract class Cipher
 	/**
 	 * Sets the initialization vector to use.
 	 * @param $iv A binary string (must be of correct length), or "" if none
-	 *        are needed.
+	 *            are needed.
 	 */
 	public function setIV($iv)
 	{
@@ -73,7 +73,7 @@ abstract class Cipher
 	/**
 	 * Sets the padding mode to use.
 	 * @param $padding A padding type. Must be one of the constants
-	 *        self::PADDING_*.
+	 *                 self::PADDING_*.
 	 */
 	public function setPadding($padding)
 	{
@@ -90,7 +90,7 @@ abstract class Cipher
 	/**
 	 * Performs $r rounds of encryption on $s with this cipher instance.
 	 * @param $s A raw string, that must have a correct length to be encrypted
-	 *        with no padding.
+	 *           with no padding.
 	 * @param $r The number of encryption rounds to perform.
 	 * @return The result as a raw string, or null in case of error.
 	 */
@@ -113,7 +113,7 @@ abstract class Cipher
 	 * @param $key The key, used for decryption as well as encryption.
 	 * @param $iv The initialization vector, or "" if none are needed.
 	 * @param $padding The type of padding to use. Must be one of the constants
-	 *        self::PADDING_*.
+	 *                 self::PADDING_*.
 	 * @return A Cipher instance, or null if no suitable crypto library is
 	 *         loaded.
 	 */
@@ -142,7 +142,7 @@ class CipherOpenSSL extends Cipher
 	 * @param $key The key, used for decryption as well as encryption.
 	 * @param $iv The initialization vector, or "" if none are needed.
 	 * @param $padding The type of padding to use. Must be one of the constants
-	 *        parent::PADDING_*.
+	 *                 parent::PADDING_*.
 	 */
 	public function __construct($method, $key = null, $iv = "",
 		$padding = self::PADDING_PKCS7)
@@ -169,7 +169,7 @@ class CipherOpenSSL extends Cipher
 	/**
 	 * Performs $r rounds of encryption on $s with this cipher instance.
 	 * @param $s A raw string, that must have a correct length to be encrypted
-	 *        with no padding.
+	 *           with no padding.
 	 * @param $r The number of encryption rounds to perform.
 	 * @return The result as a raw string, or null in case of error.
 	 */
@@ -216,11 +216,11 @@ class CipherMcrypt extends Cipher
 	/**
 	 * Constructs a new CipherMcrypt instance.
 	 * @param $method The OpenSSL method to use (will be translated to mcrypt
-	 *        corresponding cipher type and mode).
+	 *                corresponding cipher type and mode).
 	 * @param $key The key, used for decryption as well as encryption.
 	 * @param $iv The initialization vector, or "" if none are needed.
 	 * @param $padding The type of padding to use. Must be one of the constants
-	 *        parent::PADDING_*.
+	 *                 parent::PADDING_*.
 	 */
 	public function __construct($method, $key = null, $iv = "",
 		$padding = self::PADDING_PKCS7)
@@ -271,7 +271,7 @@ class CipherMcrypt extends Cipher
 	/**
 	 * Performs $r rounds of encryption on $s with this cipher instance.
 	 * @param $s A raw string, that must have a correct length to be encrypted
-	 *        with no padding.
+	 *           with no padding.
 	 * @param $r The number of encryption rounds to perform.
 	 * @return The result as a raw string, or null in case of error.
 	 */

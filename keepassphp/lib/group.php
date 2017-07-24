@@ -106,34 +106,44 @@ class Group
 	}
 
 	/**
-	 * Creates an array describing this group, containing everything except
-	 * passwords. This array can be serialized to json safely.
-	 * @return An array containing this group (except passwords).
+	 * Creates an array describing this group (with respect to the filter).
+	 * This array can be safely serialized to json after.
+	 * @param $filter A filter to select the data that is actually copied to
+	 *                the array.
+	 * @return An array containing this group.
 	 */
-	public function toArray()
+	public function toArray(iFilter $filter)
 	{
 		$result = array();
 		if($this->uuid != null)
 			$result[Database::XML_UUID] = $this->uuid;
 		if($this->name != null)
 			$result[Database::XML_NAME] = $this->name;
-		if($this->icon != null)
+		if($this->icon != null && $filter->acceptIcons())
 			$result[Database::XML_ICONID] = $this->icon;
-		if($this->customIcon != null)
+		if($this->customIcon != null && $filter->acceptIcons())
 			$result[Database::XML_CUSTOMICONUUID] = $this->customIcon;
 		if($this->groups != null)
 		{
 			$groups = array();
 			foreach($this->groups as &$group)
-				$groups[] = $group->toArray();
-			$result[Database::GROUPS] = $groups;
+			{
+				if($filter->acceptGroup($group))
+					$groups[] = $group->toArray($filter);
+			}
+			if(!empty($groups))
+				$result[Database::GROUPS] = $groups;
 		}
 		if($this->entries != null)
 		{
 			$entries = array();
 			foreach($this->entries as &$entry)
-				$entries[] = $entry->toArray();
-			$result[Database::ENTRIES] = $entries;
+			{
+				if($filter->acceptEntry($entry))
+					$entries[] = $entry->toArray($filter);
+			}
+			if(!empty($entries))
+				$result[Database::ENTRIES] = $entries;
 		}
 		return $result;
 	}
@@ -142,9 +152,10 @@ class Group
 	 * Creates a new Group instance from an array created by the method
 	 * toArray() of another Group instance.
 	 * @param $array An array created by the method toArray().
+	 * @param $version The version of the array format.
 	 * @return A Group instance if the parsing went okay, null otherwise.
 	 */
-	public static function loadFromArray(array $array)
+	public static function loadFromArray(array $array, $version)
 	{
 		if($array == null)
 			return null;
@@ -157,13 +168,13 @@ class Group
 		if(!empty($groups))
 		{
 			foreach($groups as &$subgroup)
-				$group->addGroup(self::loadFromArray($subgroup));
+				$group->addGroup(self::loadFromArray($subgroup, $version));
 		}
 		$entries = Database::getIfSet($array, Database::ENTRIES);
 		if(!empty($entries))
 		{
 			foreach($entries as &$entry)
-				$group->addEntry(Entry::loadFromArray($entry));
+				$group->addEntry(Entry::loadFromArray($entry, $version));
 		}
 		return $group;
 	}

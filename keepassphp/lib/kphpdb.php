@@ -29,10 +29,19 @@ class KphpDB
 	const KEY_KEYFILEHASH = "keyfile";
 	const KEY_HEADERHASH = "headerhash";
 	const KEY_DB = "db";
+	const KEY_VERSION = "version";
 
 	const DBTYPE_NONE = 1;
 	const DBTYPE_KDBX = 2;
 	const ROUNDS = 128;
+
+	/** Version 0 of the kphpdb serialization format. */
+	const VERSION_0 = 0;
+	/** Version 1 of the kphpdb serialization format. */
+	const VERSION_1 = 1;
+	/** Current version of the kphpdb serialization format. Databases
+	 * serialized with the current code have this format. */
+	const VERSION_CURRENT = self::VERSION_1;
 
 	/**
 	 * Constructs a new KphpDB instance.
@@ -40,7 +49,7 @@ class KphpDB
 	 * @param $db An object that will be wrapped by this KphpDB.
 	 * @param $dbFileHash The hexadecimal hash of the original db file.
 	 * @param $keyFileHash A possible hexadecimal hash of an additional key
-	 *        file if one is needed to decrypt the original db file.
+	 *                     file if needed to decrypt the original db file.
 	 */
 	protected function __construct($dbType, $db, $dbFileHash, $keyFileHash)
 	{
@@ -56,7 +65,7 @@ class KphpDB
 	 * @param $db A Database instance.
 	 * @param $dbFileHash The hexadecimal hash of the original db file.
 	 * @param $keyFileHash A possible hexadecimal hash of an additional key
-	 *        file if one is needed to decrypt the original db file.
+	 *                     file if needed to decrypt the original db file.
 	 * @return A new KphpDB instance.
 	 */
 	public static function createFromDatabase(Database $db, $dbFileHash,
@@ -69,7 +78,7 @@ class KphpDB
 	 * Creates a new KphpDB instance that wraps nothing.
 	 * @param $dbFileHash The hexadecimal hash of the original db file.
 	 * @param $keyFileHash A possible hexadecimal hash of an additional key
-	 *        file if one is needed to decrypt the original db file.
+	 *                     file if needed to decrypt the original db file.
 	 * @return A new KphpDB instance.
 	 */
 	public static function createEmpty($dbFileHash, $keyFileHash)
@@ -117,17 +126,22 @@ class KphpDB
 
 	/**
 	 * Serializes this instance to a JSon string.
+	 * @param $filter An iFilter instance to select the data of the database
+	 *                that must actually be serialized (if null, it will
+	 *                serialize everything except from passowrds).
 	 * @param &$error A string that will receive a message in case of error.
 	 * @return A JSon string in case of success, or null in case of error.
 	 */
-	public function toJSon(&$error)
+	public function toJSon($filter, &$error)
 	{
 		$array = array(
+			self::KEY_VERSION => self::VERSION_CURRENT,
 			self::KEY_DBTYPE => $this->_dbType,
 			self::KEY_DBFILEHASH => $this->_dbFileHash,
 			self::KEY_KEYFILEHASH => $this->_keyFileHash,
 			self::KEY_HEADERHASH => base64_encode($this->_headerHash),
-			self::KEY_DB => $this->_db->toArray());
+			self::KEY_DB => $this->_db->toArray($filter));
+		print_r($array);
 		$r = json_encode($array);
 		if($r === false)
 		{
@@ -142,11 +156,14 @@ class KphpDB
 	 * Serializes this instance to a JSon string and encrypts it in a kdbx
 	 * file.
 	 * @param $key A iKey instance to use to encrypt the kdbx file.
+	 * @param $filter An iFilter instance to select the data of the database
+	 *                that must actually be serialized (if null, it will
+	 *                serialize everything except from passowrds).
 	 * @param &$error A string that will receive a message in case of error.
 	 * @return A string containing a kdbx file embbeding this serialized
 	 *         instance, or null in case of error.
 	 */
-	public function toKdbx(iKey $key, &$error)
+	public function toKdbx(iKey $key, $filter, &$error)
 	{
 		$kdbx = KdbxFile::createForEncrypting(self::ROUNDS, $error);
 		if($kdbx == null)
@@ -154,7 +171,7 @@ class KphpDB
 
 		$this->_headerHash = $kdbx->getHeaderHash();
 
-		$json = $this->toJSon($error);
+		$json = $this->toJSon($filter, $error);
 		if(empty($json))
 			return null;
 
@@ -187,11 +204,16 @@ class KphpDB
 			$error = "KphpDB JSon load: incomplete file.";
 			return null;
 		}
+		$version = array_key_exists(self::KEY_VERSION, $array)
+			? intval($array[self::KEY_VERSION])
+			: self::VERSION_0;
+
 		$dbType = $array[self::KEY_DBTYPE];
 		$db = null;
 		if($dbType == self::DBTYPE_KDBX)
 		{
-			$db = Database::loadFromArray($array[self::KEY_DB], $error);
+			$db = Database::loadFromArray($array[self::KEY_DB], $version,
+				$error);
 			if($db === null)
 				return null;
 		}
@@ -208,7 +230,7 @@ class KphpDB
 
 	/**
 	 * Creates a new KphpDB instance from a kdbx file, that should have been
-	 * created by the method toKdbxString() of another KphpDB instance.
+	 * created by the method toKdbx() of another KphpDB instance.
 	 * @param $reader A Reader instance reading a kdbx file.
 	 * @param $key A iKey instance to use to decrypt the kdbx file.
 	 * @param &$error A string that will receive a message in case of error.

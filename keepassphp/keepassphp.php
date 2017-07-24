@@ -37,11 +37,11 @@ class KeePassPHPException extends \Exception
 }
 
 /*
- * here we include everything, we could use an autoload in the future but
- * the fact is that from the moment we want to decrypt a KeePass database,
- * we do need almost everything, so there is not much difference. The important
- * point is to include keepassphp.php in client applications only when we are
- * sure we will try to add or get a database file.
+ * Here we include everything, we could use an autoload in the future but the
+ * fact is that from the moment we want to decrypt a KeePass database, we do
+ * need almost everything, so there is not much difference. The important point
+ * is to include keepassphp.php in client applications only when we are sure we
+ * will try to add or get a database file.
  */
 
 require_once "vendor/random_compat-2.0.10/lib/random.php";
@@ -55,6 +55,7 @@ require_once "util/protectedstring.php";
 
 require_once "lib/protectedxmlreader.php";
 require_once "lib/key.php";
+require_once "lib/filter.php";
 require_once "lib/kdbxheader.php";
 require_once "lib/kdbxfile.php";
 require_once "lib/database.php";
@@ -98,6 +99,11 @@ abstract class KeePassPHP
 	const IDX_WRITEABLE = 3;
 	const IDX_ENTRIES = 4;
 	const IDX_COUNT = 5;
+
+	/**
+	 * The version of the API exposed by this version of KeePassPHP.
+	 */
+	const API_VERSION = 1;
 
 	/**
 	 * Starts the KeePassPHP application. This method must be called before all
@@ -281,18 +287,17 @@ abstract class KeePassPHP
 
 	/**
 	 * Gets the database of id $dbid from the internal KeePassPHP database.
-	 * It may be a cached version with no passwords, cheaper to decrypt.
+	 * It may be a cached version with less data (e.g no passwords), but
+	 * cheaper to decrypt.
 	 * @param $dbid A database ID.
 	 * @param $kphpdbPwd The password of the KphpDB file.
 	 * @param $dbPwd The password of the database file (may be unused if a
-	 *        cached version exists and if $withPasswords is false).
-	 * @param $withPasswords Whether the real database file with passwords
-	 *        must be returned. Otherwise, the passwordless, cached version
-	 *        will be returned if it exists.
+	 *               cached version exists and if $full is false).
+	 * @param $full Whether the real, full database file must be returned.
+	 *              Otherwise, the cached version will be returned if it exists.
 	 * @return A Database instance, or null if an error occured.
 	 */
-	public static function getDatabase($dbid, $kphpdbPwd, $dbPwd,
-		$withPasswords)
+	public static function getDatabase($dbid, $kphpdbPwd, $dbPwd, $full)
 	{
 		if(!self::$_started)
 		{
@@ -305,7 +310,7 @@ abstract class KeePassPHP
 			$kphpdb = self::openKphpDB($dbid, $kphpdbPwd);
 
 			$db = null;
-			if(!$withPasswords && $kphpdb->getDBType() == KphpDB::DBTYPE_KDBX)
+			if(!$full && $kphpdb->getDBType() == KphpDB::DBTYPE_KDBX)
 			{
 				$db = $kphpdb->getDB();
 				if($db != null)
@@ -338,19 +343,22 @@ abstract class KeePassPHP
 
 	/**
 	 * Adds a database to the internal KeePassPHP database, with the id $dbid.
-	 * $dbid must not exist already. A cached version with no passwords,
-	 * cheaper to decrypt, may be stored as well.
+	 * $dbid must not exist already. A cached version with less data (e.g no
+	 * passwords), but cheaper to decrypt, may be stored as well.
 	 * @param $dbid A database ID.
 	 * @param $dbFile The path of the KeePass database file.
 	 * @param $dbPwd The password of the database file.
 	 * @param $dbKeyFile The path of a key file for the database file, if
-	 *        applicable (use null otherwise).
+	 *                   applicable (use null otherwise).
 	 * @param $kphpdbPwd A password to use to create the KphpDB file.
-	 * @param $cache Whether to also create a passwordless, cached version.
+	 * @param $cache Whether to also create a cached version cheaper to decrypt
+	 *               (using $filter to select the data stored in it).
+	 * @param $filter A filter to select what is stored in the cached database
+	 *                (if null, it will store everything except from passwords).
 	 * @return true in case of success, false otherwise.
 	 */
 	public static function addDatabaseFromFiles($dbid, $dbFile, $dbPwd,
-		$dbKeyFile, $kphpdbPwd, $cache)
+		$dbKeyFile, $kphpdbPwd, $cache, iFilter $filter = null)
 	{
 		if(empty($dbFile))
 		{
@@ -359,24 +367,27 @@ abstract class KeePassPHP
 		}
 		return self::addDatabase($dbid, file_get_contents($dbFile), $dbPwd,
 			empty($dbKeyFile) ? null : file_get_contents($dbKeyFile),
-			$kphpdbPwd, $cache);
+			$kphpdbPwd, $cache, $filter);
 	}
 
 	/**
 	 * Adds a database to the internal KeePassPHP database, with the id $dbid.
-	 * $dbid must not exist already. A cached version with no passwords,
-	 * cheaper to decrypt, may be stored as well.
+	 * $dbid must not exist already. A cached version with less data (e.g no
+	 * passwords), but cheaper to decrypt, may be stored as well.
 	 * @param $dbid A database ID.
 	 * @param $dbContent The content of the KeePass database file, as a string.
 	 * @param $dbPwd The password of the database file.
 	 * @param $dbKeyContent The content of a key file for the database file, as
-	 *        a string (if applicable; use null otherwise).
+	 *                      a string (if applicable; use null otherwise).
 	 * @param $kphpdbPwd A password to use to create the KphpDB file.
-	 * @param $cache Whether to also create a passwordless, cached version.
+	 * @param $cache Whether to also create a cached version cheaper to decrypt
+	 *               (using $filter to select the data stored in it).
+	 * @param $filter A filter to select what is stored in the cached database
+	 *                (if null, it will store everything except from passwords).
 	 * @return true in case of success, false otherwise.
 	 */
 	public static function addDatabase($dbid, $dbContent, $dbPwd,
-		$dbKeyContent, $kphpdbPwd, $cache)
+		$dbKeyContent, $kphpdbPwd, $cache, iFilter $filter = null)
 	{
 		if(!self::$_started)
 		{
@@ -393,7 +404,6 @@ abstract class KeePassPHP
 
 			// check that the database being added can be opened
 			$db = self::openDatabase($dbContent, $dbPwd, $dbKeyContent);
-
 			// add it to the db manager
 			$dbHash = self::$_databaseManager->addWithKey(random_bytes(32),
 				$dbContent, self::EXT_KDBX, true, true);
@@ -415,7 +425,8 @@ abstract class KeePassPHP
 				: KphpDB::createEmpty($dbHash, $keyFileHash);
 			$error = null;
 			$kphpdbContent = $kphpdb->toKdbx(
-				new KeyFromPassword($kphpdbPwd, KdbxFile::HASH), $error);
+				new KeyFromPassword($kphpdbPwd, KdbxFile::HASH),
+				$filter, $error);
 			if($kphpdbContent == null)
 				throw new KeePassPHPException($error);
 
@@ -622,8 +633,8 @@ abstract class KeePassPHP
 	 * @param $content The content of the kdbx file, as a string.
 	 * @param $key An iKey instance.
 	 * @param $headerHash true if the header hash is prepended to the decrypted
-	 *        content (use true if the kdbx file was created with the metod
-	 *        encryptInKdbx()).
+	 *                    content (use true if the kdbx file was created with
+	 *                    the metod encryptInKdbx()).
 	 * @param &$error A string that will receive a message in case of error.
 	 * @return The decrypted embedded string, or null in case of error.
 	 */

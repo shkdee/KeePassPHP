@@ -34,6 +34,7 @@ class Database
 	const XML_TAGS = "Tags";
 
 	const KEY_PASSWORD = "Password";
+	const KEY_STRINGFIELDS = "StringFields";
 	const KEY_TITLE = "Title";
 	const KEY_USERNAME = "UserName";
 	const KEY_URL = "URL";
@@ -189,23 +190,32 @@ class Database
 	}
 
 	/**
-	 * Creates an array describing this database, containing everything
-	 * except passwords. This array can be serialized to json safely.
+	 * Creates an array describing this database (with respect to the filter).
+	 * This array can be safely serialized to json after.
+	 * @param $filter A filter to select the data that is actually copied to
+	 *                the array (if null, it will serialize everything except
+	 *                from passowrds).
 	 * @return An array containing this database (except passwords).
 	 */
-	public function toArray()
+	public function toArray(iFilter $filter = null)
 	{
+		if($filter == null)
+			$filter = new AllExceptFromPasswordsFilter();
 		$result = array();
 		if($this->_name != null)
 			$result[self::XML_DATABASENAME] = $this->_name;
-		if($this->_customIcons != null)
+		if($this->_customIcons != null && $filter->acceptIcons())
 			$result[self::XML_CUSTOMICONS] = $this->_customIcons;
 		if($this->_groups != null)
 		{
 			$groups = array();
 			foreach($this->_groups as &$group)
-				$groups[] = $group->toArray();
-			$result[self::GROUPS] = $groups;
+			{
+				if($filter->acceptGroup($group))
+					$groups[] = $group->toArray($filter);
+			}
+			if(!empty($groups))
+				$result[self::GROUPS] = $groups;
 		}
 		return $result;
 	}
@@ -214,10 +224,11 @@ class Database
 	 * Creates a new Database instance from an array created by the method
 	 * toArray() of another Database instance.
 	 * @param $array An array created by the method toArray().
+	 * @param $version The version of the array format.
 	 * @param &$error A string that will receive a message in case of error.
 	 * @return A Database instance if the parsing went okay, null otherwise.
 	 */
-	public static function loadFromArray(array $array, &$error)
+	public static function loadFromArray(array $array, $version, &$error)
 	{
 		if($array == null)
 		{
@@ -231,7 +242,7 @@ class Database
 		if(!empty($groups))
 		{
 			foreach($groups as &$group)
-				$db->addGroup(Group::loadFromArray($group));
+				$db->addGroup(Group::loadFromArray($group, $version));
 		}
 		if($db->_name == null && $db->_groups == null)
 		{
