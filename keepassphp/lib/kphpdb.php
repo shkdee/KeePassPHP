@@ -141,7 +141,6 @@ class KphpDB
 			self::KEY_KEYFILEHASH => $this->_keyFileHash,
 			self::KEY_HEADERHASH => base64_encode($this->_headerHash),
 			self::KEY_DB => $this->_db->toArray($filter));
-		print_r($array);
 		$r = json_encode($array);
 		if($r === false)
 		{
