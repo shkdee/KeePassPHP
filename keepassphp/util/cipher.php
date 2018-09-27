@@ -122,9 +122,9 @@ abstract class Cipher
 	{
 		return (PHP_VERSION_ID >= 50400 && extension_loaded("openssl"))
 			? new CipherOpenSSL($method, $key, $iv, $padding)
-			: extension_loaded("mcrypt") && defined("MCRYPT_RIJNDAEL_128")
+			: (extension_loaded("mcrypt") && defined("MCRYPT_RIJNDAEL_128")
 				? new CipherMcrypt($method, $key, $iv, $padding)
-				: null;
+				: null);
 	}
 }
 
