@@ -70,6 +70,16 @@ class Entry
 	}
 
 	/**
+	 * List custom string fields of this Entry
+	 * @return A list containing custom fields.
+	 */
+	function listCustomFields()
+	{
+		$standard = array(Database::KEY_PASSWORD, Database::KEY_TITLE, Database::KEY_USERNAME, Database::KEY_URL, Database::KEY_NOTES);
+		return array_values(array_diff(array_keys($this->stringFields), $standard));
+	}
+
+	/**
 	 * Adds an Entry instance to the history of this entry.
 	 * @param $entry An Entry instance, possibly null (it is then ignored).
 	 */
