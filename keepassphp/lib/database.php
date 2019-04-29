@@ -38,6 +38,7 @@ class Database
 	const KEY_TITLE = "Title";
 	const KEY_USERNAME = "UserName";
 	const KEY_URL = "URL";
+	const KEY_NOTES = "Notes";
 
 	const GROUPS = "Groups";
 	const ENTRIES = "Entries";
@@ -101,6 +102,48 @@ class Database
 				$value = $group->getPassword($uuid);
 				if($value != null)
 					return $value->getPlainString();
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Gets the string field value of the entry whose uuid is $uuid.
+	 * @param $uuid An entry uuid in base64.
+	 * @param $key A key.
+	 * @return A string of value the field if the entry if exists,
+	 *         an empty string if the entry exists but the string field,
+	 *         null if entry does not exists.
+	 */
+	public function getStringField($uuid, $key)
+	{
+		if($this->_groups != null)
+		{
+			foreach($this->_groups as &$group)
+			{
+				$value = $group->getStringField($uuid, $key);
+				if($value != null)
+					return $value;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * List custom string field variables of the entry whose uuid is $uuid.
+	 * @param $uuid An entry uuid in base64.
+	 * @return A list of custom fields if the entry exists,
+	 *         null if entry does not exists.
+	 */
+	public function listCustomFields($uuid)
+	{
+		if($this->_groups != null)
+		{
+			foreach($this->_groups as &$group)
+			{
+				$value = $group->listCustomFields($uuid);
+				if($value !== null) /* strict compare */
+					return $value;
 			}
 		}
 		return null;

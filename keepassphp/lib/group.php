@@ -78,6 +78,69 @@ class Group
 	}
 
 	/**
+	 * Gets the string field value of the entry of this group or of a sub-group
+	 * whose uuid is $uuid.
+	 * @param $uuid An entry uuid in base64.
+	 * @param $key A key.
+	 * @return A string containing the value of the field if the entry if
+	 *         exists inside this group or a sub-group,
+	 *         an empty string if the entry exists but the string field,
+	 *         null if entry does not exists.
+	 */
+	public function getStringField($uuid, $key)
+	{
+		if($this->entries != null)
+		{
+			foreach($this->entries as &$entry)
+			{
+				if($entry->uuid === $uuid)
+					return $entry->getStringField($key);
+			}
+		}
+		if($this->groups != null)
+		{
+			foreach($this->groups as &$group)
+			{
+				$value = $group->getStringField($uuid, $key);
+				if($value != null)
+					return $value;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * List custom string fields of the entry of this group or of a sub-group
+	 * whose uuid is $uuid.
+	 * @param $uuid An entry uuid in base64.
+	 * @return A list of custom fields if the entry exists inside this group
+	 *         or a sub-group, null if entry does not exists.
+	 */
+	public function listCustomFields($uuid)
+	{
+		if($this->entries != null)
+		{
+			foreach($this->entries as &$entry)
+			{
+				if($entry->uuid === $uuid)
+				{
+					return $entry->listCustomFields();
+				}
+			}
+		}
+		if($this->groups != null)
+		{
+			foreach($this->groups as &$group)
+			{
+				$value = $group->listCustomFields($uuid);
+				if($value !== null) /* strict compare */
+					return $value;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Adds a Group instance as a sub-group of this group.
 	 * @param $entry A Group instance, possibly null (it is then ignored).
 	 */
