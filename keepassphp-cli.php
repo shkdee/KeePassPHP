@@ -311,7 +311,7 @@ else if($command == "export")
 	$source = KeePassPHP::getDatabaseFilename($dbid, $kphpdbPwd);
 	if (!$source)
 	{
-		$kphpdbPwd = KeePassPHP::extractHalfPassword($pwd);
+		$kphpdbPwd = KeePassPHP::extractHalfPassword($kphpdbPwd);
 		$source = KeePassPHP::getDatabaseFilename($dbid, $kphpdbPwd);
 	}
 	
