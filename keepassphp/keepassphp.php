@@ -456,6 +456,45 @@ abstract class KeePassPHP
 	}
 
 	/**
+	 * Get the database filename from the $dbid.
+	 * @param $dbid A database ID.
+	 * @param $kphpdbPwd The password of the KphpDB file.
+	 * @return the filename of database if the database $dbid existed,
+	 *         false otherwise.
+	 */
+	public static function getDatabaseFilename($dbid, $kphpdbPwd)
+	{
+		if(!self::$_started)
+		{
+			self::addDebug("KeepassPHP is not started!");
+			return false;
+		}
+
+		try
+		{
+			$kphpdb = self::openKphpDB($dbid, $kphpdbPwd);
+			$hash = $kphpdb->getDBFileHash();
+			if($hash !== null)
+			{
+				$path = 'keepassphp'
+					.DIRECTORY_SEPARATOR
+					.rtrim(self::DEFAULT_DATA_DIR, DIRECTORY_SEPARATOR)
+					.DIRECTORY_SEPARATOR
+					.rtrim(self::DIR_DATABASE, DIRECTORY_SEPARATOR);
+
+				$filename = (self::PREFIX_DATABASE).'_'.$hash.'.'.(self::EXT_KDBX);
+
+				return $path.DIRECTORY_SEPARATOR.$filename;
+			}
+		}
+		catch(KeePassPHPException $exception)
+		{
+			self::raiseError($exception);
+			return false;
+		}
+	}
+
+	/**
 	 * Removes the database of id $dbid from the internal KeePassPHP database.
 	 * @param $dbid A database ID.
 	 * @param $kphpdbPwd The password of the KphpDB file.
