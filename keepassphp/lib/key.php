@@ -122,6 +122,8 @@ class KeyFromFile extends KeyFromHash
 {
 	const XML_ROOT = "KeyFile";
 	const XML_KEY = "Key";
+	const XML_META = "Meta";
+	const XML_VERSION = "Version";
 	const XML_DATA = "Data";
 
 	public $isParsed = false;
@@ -170,8 +172,21 @@ class KeyFromFile extends KeyFromHash
 		if($xml->isElement(self::XML_ROOT))
 		{
 			$d = $xml->depth();
+			// get KeyFile version from <Meta>
+			$version = null;
 			while($xml->read($d))
 			{
+				if($xml->isElement(self::XML_META))
+				{
+					$keyD = $xml->depth();
+					while($xml->read($keyD))
+					{
+						if($xml->isElement(self::XML_VERSION))
+						{
+							$version = $xml->readTextInside();
+						}
+					}
+				}
 				if($xml->isElement(self::XML_KEY))
 				{
 					$keyD = $xml->depth();
@@ -179,10 +194,25 @@ class KeyFromFile extends KeyFromHash
 					{
 						if($xml->isElement(self::XML_DATA))
 						{
+							/* KeePass 2.47 introduced Enhanced XML key file format (added hash that allows to verify the integrity of the key; values are now encoded using hexadecimal characters in order to improve the readability). */
 							$value = $xml->readTextInside();
-							$this->hash = base64_decode($value);
-							$xml->close();
-							return true;
+							if($version == "1.0")
+							{
+								$this->hash = base64_decode($value);
+								$xml->close();
+								return true;
+							}
+							elseif($version == "2.0")
+							{
+								$this->hash = hex2bin(preg_replace('/\s*/m', '', $value));
+								$xml->close();
+								return true;
+							}
+							else
+							{
+								$xml->close();
+								return false;
+							}
 						}
 					}
 				}
